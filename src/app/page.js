@@ -1,69 +1,165 @@
-import Image from "next/image";
+import Link from "next/link";
+
+const categories = [
+  {
+    emoji: "🎂",
+    name: "Bánh sinh nhật",
+    desc: "Thiết kế theo yêu cầu, đủ hình dáng và hương vị",
+  },
+  {
+    emoji: "🍰",
+    name: "Bánh kem",
+    desc: "Kem tươi mịn, ngọt thanh, trang trí tinh tế",
+  },
+  {
+    emoji: "🧁",
+    name: "Cupcake",
+    desc: "Xinh xắn, tiện lợi cho mọi bữa tiệc nhỏ",
+  },
+  {
+    emoji: "🥐",
+    name: "Bánh mì & Croissant",
+    desc: "Vỏ giòn tan, ủ men tự nhiên mỗi sáng",
+  },
+  {
+    emoji: "🍩",
+    name: "Donut",
+    desc: "Phủ topping đa dạng, mềm xốp từng miếng",
+  },
+  {
+    emoji: "🍪",
+    name: "Bánh quy",
+    desc: "Giòn rụm, thơm bơ, đóng hộp làm quà tặng",
+  },
+  {
+    emoji: "🥮",
+    name: "Bánh Trung thu",
+    desc: "Nhân truyền thống và hiện đại, theo mùa",
+  },
+  {
+    emoji: "🍮",
+    name: "Bánh su kem",
+    desc: "Nhân kem trứng béo ngậy, vỏ bánh nhẹ tan",
+  },
+];
+
+const features = [
+  {
+    icon: "🌾",
+    title: "Nguyên liệu tươi sạch",
+    desc: "Bột, trứng, sữa tuyển chọn mỗi ngày, không chất bảo quản",
+  },
+  {
+    icon: "🚚",
+    title: "Giao hàng nhanh trong ngày",
+    desc: "Đặt trước 15h, nhận bánh tươi ngay trong hôm nay",
+  },
+  {
+    icon: "🤖",
+    title: "Tìm kiếm bằng AI",
+    desc: "Mô tả bằng lời, AI gợi ý đúng loại bánh bạn cần",
+  },
+];
 
 export default function Home() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.js
-            </code>{" "}
-            file.
+    <main className="flex-1 bg-white">
+      {/* Hero */}
+      <section className="bg-gradient-to-b from-amber-50 to-white">
+        <div className="max-w-7xl mx-auto px-4 py-20 flex flex-col items-center text-center gap-6">
+          <span className="text-sm font-medium text-amber-700 bg-amber-100 px-3 py-1 rounded-full">
+            Tiệm bánh trực tuyến #1 với tìm kiếm AI
+          </span>
+          <h1 className="text-4xl sm:text-5xl font-bold text-gray-900 max-w-2xl leading-tight">
+            Bánh ngon mỗi ngày,
+            <br />
+            ngọt ngào từng khoảnh khắc
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+          <p className="text-lg text-gray-600 max-w-xl">
+            Từ bánh sinh nhật, bánh kem cho đến bánh mì mỗi sáng — chọn đúng
+            loại bánh bạn thích chỉ trong vài giây nhờ trợ lý tìm kiếm AI.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-4 mt-2">
+            <Link
+              href="/products"
+              className="bg-gray-900 text-white px-6 py-3 rounded-md font-medium hover:bg-gray-800 transition-colors"
             >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+              Khám phá sản phẩm
+            </Link>
+            <Link
+              href="/search"
+              className="border border-gray-300 text-gray-900 px-6 py-3 rounded-md font-medium hover:bg-gray-50 transition-colors"
             >
-              Learning
-            </a>{" "}
-            center.
+              Tìm kiếm bằng AI
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* Danh mục bánh */}
+      <section className="max-w-7xl mx-auto px-4 py-16">
+        <div className="text-center mb-10">
+          <h2 className="text-2xl sm:text-3xl font-bold text-gray-900">
+            Các loại bánh nổi bật
+          </h2>
+          <p className="text-gray-600 mt-2">
+            Đa dạng lựa chọn cho mọi dịp, mọi sở thích
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+          {categories.map((cat) => (
+            <Link
+              key={cat.name}
+              href={`/products?category=${encodeURIComponent(cat.name)}`}
+              className="group border border-gray-200 rounded-xl p-5 flex flex-col items-center text-center gap-2 hover:border-gray-900 hover:shadow-md transition-all"
+            >
+              <span className="text-4xl">{cat.emoji}</span>
+              <h3 className="font-semibold text-gray-900 group-hover:text-black">
+                {cat.name}
+              </h3>
+              <p className="text-sm text-gray-500">{cat.desc}</p>
+            </Link>
+          ))}
         </div>
-      </main>
-    </div>
+      </section>
+
+      {/* Banner khuyến mãi */}
+      <section className="max-w-7xl mx-auto px-4 pb-16">
+        <div className="bg-gray-900 rounded-2xl px-8 py-10 flex flex-col sm:flex-row items-center justify-between gap-6 text-white">
+          <div>
+            <h2 className="text-2xl font-bold">
+              Ưu đãi hôm nay: Giảm 20% cho đơn bánh sinh nhật
+            </h2>
+            <p className="text-gray-300 mt-1">
+              Áp dụng khi đặt trước 24 giờ, số lượng có hạn.
+            </p>
+          </div>
+          <Link
+            href="/products?category=B%C3%A1nh%20sinh%20nh%E1%BA%ADt"
+            className="bg-white text-gray-900 px-6 py-3 rounded-md font-medium hover:bg-gray-100 transition-colors whitespace-nowrap"
+          >
+            Đặt bánh ngay
+          </Link>
+        </div>
+      </section>
+
+      {/* Vì sao chọn chúng tôi */}
+      <section className="bg-amber-50">
+        <div className="max-w-7xl mx-auto px-4 py-16">
+          <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 text-center mb-10">
+            Vì sao chọn ShopAI
+          </h2>
+          <div className="grid sm:grid-cols-3 gap-8">
+            {features.map((f) => (
+              <div key={f.title} className="text-center flex flex-col items-center gap-2">
+                <span className="text-4xl">{f.icon}</span>
+                <h3 className="font-semibold text-gray-900">{f.title}</h3>
+                <p className="text-sm text-gray-600 max-w-xs">{f.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+    </main>
   );
 }
