@@ -20,6 +20,12 @@ export default function Header() {
             Giỏ hàng
           </a>
           <a
+            href="/loi-cam-on"
+            className="text-sm text-amber-700 border border-amber-300 px-4 py-2 rounded-md hover:bg-amber-50"
+          >
+            Lời cảm ơn
+          </a>
+          <a
             href="/login"
             className="text-sm bg-gray-900 text-white px-4 py-2 rounded-md hover:bg-gray-800"
           >

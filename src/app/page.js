@@ -151,7 +151,10 @@ export default function Home() {
           </h2>
           <div className="grid sm:grid-cols-3 gap-8">
             {features.map((f) => (
-              <div key={f.title} className="text-center flex flex-col items-center gap-2">
+              <div
+                key={f.title}
+                className="text-center flex flex-col items-center gap-2"
+              >
                 <span className="text-4xl">{f.icon}</span>
                 <h3 className="font-semibold text-gray-900">{f.title}</h3>
                 <p className="text-sm text-gray-600 max-w-xs">{f.desc}</p>
