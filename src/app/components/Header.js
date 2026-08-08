@@ -13,19 +13,16 @@ export default function Header() {
           <a href="/search" className="hover:text-gray-900">
             Tìm kiếm AI
           </a>
+          <a href="/loi-cam-on" className="hover:text-gray-900">
+            Lời cảm ơn
+          </a>
         </nav>
 
         <div className="flex items-center gap-4">
           <a href="/cart" className="text-sm text-gray-700 hover:text-gray-900">
             Giỏ hàng
           </a>
-          <a
-            href="/loi-cam-on"
-            className="text-sm text-amber-700 border border-amber-300 px-4 py-2 rounded-md hover:bg-amber-50"
-          >
-            Lời cảm ơn
-          </a>
-          <a
+          <
             href="/login"
             className="text-sm bg-gray-900 text-white px-4 py-2 rounded-md hover:bg-gray-800"
           >
