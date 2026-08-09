@@ -69,9 +69,24 @@ export default function Header() {
             <Link href="/loi-cam-on" className="hover:text-gray-900">
               Lời cảm ơn
             </Link>
-            <Link href={sellerHref} className="hover:text-gray-900">
-              Người bán
-            </Link>
+            {/* Đang đăng nhập bên Người bán: gộp email + nhãn "Người bán"
+                ngay tại đây (bên trái, trước khung tìm kiếm) thay vì hiện
+                lặp lại ở bên phải header như bên Người mua. */}
+            {user?.role === "seller" ? (
+              <Link
+                href="/seller"
+                className="flex items-center gap-1.5 text-gray-700 hover:text-gray-900"
+              >
+                {user.email}
+                <span className="text-xs text-amber-700 bg-amber-50 rounded-full px-2 py-0.5">
+                  Người bán
+                </span>
+              </Link>
+            ) : (
+              <Link href={sellerHref} className="hover:text-gray-900">
+                Người bán
+              </Link>
+            )}
           </nav>
         </div>
 
@@ -113,17 +128,20 @@ export default function Header() {
         <div className="flex items-center gap-3 sm:gap-4 text-sm text-gray-600 shrink-0">
           {user ? (
             <div className="flex items-center gap-2 sm:gap-3">
-              {/* Bấm vào email/vai trò -> trang /account để chỉnh sửa
-                  email, số điện thoại, địa chỉ liên lạc. */}
-              <Link
-                href="/account"
-                className="hidden sm:inline-flex items-center gap-1.5 text-gray-700 hover:text-gray-900"
-              >
-                {user.email}{" "}
-                <span className="text-xs text-amber-700 bg-amber-50 rounded-full px-2 py-0.5">
-                  {user.role === "seller" ? "Người bán" : "Người mua"}
-                </span>
-              </Link>
+              {/* Bên Người bán: email + nhãn "Người bán" đã hiện ở bên
+                  trái (trước khung tìm kiếm, xem nav ở trên) — không lặp
+                  lại ở đây nữa. Bên Người mua vẫn hiện như cũ. */}
+              {user.role !== "seller" && (
+                <Link
+                  href="/account"
+                  className="hidden sm:inline-flex items-center gap-1.5 text-gray-700 hover:text-gray-900"
+                >
+                  {user.email}{" "}
+                  <span className="text-xs text-amber-700 bg-amber-50 rounded-full px-2 py-0.5">
+                    Người mua
+                  </span>
+                </Link>
+              )}
               <button
                 onClick={logout}
                 className="text-sm bg-gray-900 text-white px-3 sm:px-4 py-2 rounded-md hover:bg-gray-800"
@@ -170,13 +188,26 @@ export default function Header() {
             >
               Lời cảm ơn
             </Link>
-            <Link
-              href={sellerHref}
-              onClick={closeMenu}
-              className="px-2 py-2.5 rounded-md hover:bg-gray-50 text-gray-700"
-            >
-              Người bán
-            </Link>
+            {user?.role === "seller" ? (
+              <Link
+                href="/seller"
+                onClick={closeMenu}
+                className="flex items-center gap-1.5 px-2 py-2.5 rounded-md hover:bg-gray-50 text-gray-700"
+              >
+                {user.email}
+                <span className="text-xs text-amber-700 bg-amber-50 rounded-full px-2 py-0.5">
+                  Người bán
+                </span>
+              </Link>
+            ) : (
+              <Link
+                href={sellerHref}
+                onClick={closeMenu}
+                className="px-2 py-2.5 rounded-md hover:bg-gray-50 text-gray-700"
+              >
+                Người bán
+              </Link>
+            )}
           </nav>
 
           <p className="text-xs font-medium text-gray-400 uppercase tracking-wide px-2 mb-1">
