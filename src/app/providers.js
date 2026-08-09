@@ -12,6 +12,55 @@ const OrdersContext = createContext(null);
 
 const CART_KEY = "shopai_cart";
 
+// Đọc role/is_seller/active_role của 1 tài khoản — CHỊU ĐƯỢC trường hợp
+// project chưa chạy supabase/schema.sql bản mới nhất (chưa có cột
+// is_seller/active_role, thêm ở v6): tự động thử lại chỉ với cột `role` cũ,
+// suy ra is_seller từ role === 'seller', active_role = null (bỏ qua kiểm
+// tra đăng nhập song song 2 vai trò cho tới khi chạy SQL cập nhật). Nhờ vậy
+// đăng nhập (kể cả bên Người bán) và khôi phục phiên đăng nhập vẫn hoạt
+// động bình thường ngay cả khi chưa chạy SQL — chỉ tính năng "chặn đăng
+// nhập song song" là cần SQL mới để bật.
+async function fetchProfileRow(userId) {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("role, email, phone, address, is_seller, active_role")
+    .eq("id", userId)
+    .maybeSingle();
+  if (!error) return { ...data, schemaReady: true };
+
+  console.warn(
+    "[AuthProvider] Chưa có cột is_seller/active_role trong bảng profiles " +
+      "(có thể project chưa chạy supabase/schema.sql bản mới nhất) — tạm dùng cột role cũ:",
+    error
+  );
+  const { data: legacy, error: legacyError } = await supabase
+    .from("profiles")
+    .select("role, email, phone, address")
+    .eq("id", userId)
+    .maybeSingle();
+  if (legacyError) throw legacyError;
+  return {
+    ...legacy,
+    is_seller: legacy?.role === "seller",
+    active_role: null,
+    schemaReady: false,
+  };
+}
+
+// Ghi is_seller/active_role — KHÔNG throw nếu lỗi (vd: cột chưa tồn tại vì
+// chưa chạy schema.sql bản mới), chỉ cảnh báo ra console. Đây chỉ là dữ
+// liệu hỗ trợ chặn đăng nhập song song 2 vai trò, không phải điều kiện bắt
+// buộc để đăng nhập/đăng ký thành công — giống cách updateProfile ở
+// /checkout không chặn việc đặt hàng khi Supabase lưu thất bại.
+async function writeProfileRole(userId, patch) {
+  const { error } = await supabase.from("profiles").update(patch).eq("id", userId);
+  if (error) {
+    console.warn("[AuthProvider] Không lưu được is_seller/active_role:", error);
+    return false;
+  }
+  return true;
+}
+
 // Đăng nhập/đăng ký thật bằng Supabase Auth (email + mật khẩu). Vai trò
 // (buyer/seller) được lưu trong bảng `profiles`, tự tạo qua trigger
 // `on_auth_user_created` (xem supabase/schema.sql) ngay khi signUp() thành
@@ -25,17 +74,14 @@ function AuthProvider({ children }) {
     let cancelled = false;
 
     async function loadProfile(userId) {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("role, email, phone, address, is_seller, active_role")
-        .eq("id", userId)
-        .maybeSingle();
-      if (cancelled) return;
-      if (error) {
+      try {
+        const data = await fetchProfileRow(userId);
+        if (cancelled) return;
+        setProfile(data);
+      } catch (error) {
+        if (cancelled) return;
         console.error("[AuthProvider] Không tải được profile:", error);
         setProfile(null);
-      } else {
-        setProfile(data);
       }
     }
 
@@ -114,34 +160,28 @@ function AuthProvider({ children }) {
       }
 
       const userId = signInData.user.id;
-      const { data: existingProfile, error: profileErr } = await supabase
-        .from("profiles")
-        .select("is_seller, active_role")
-        .eq("id", userId)
-        .maybeSingle();
-      if (profileErr) throw profileErr;
+      // Đọc bằng fetchProfileRow (chịu được thiếu cột is_seller/active_role)
+      // để việc "thêm vai trò vào tài khoản có sẵn" luôn thành công, kể cả
+      // khi project chưa chạy schema.sql bản mới nhất.
+      const existingProfile = await fetchProfileRow(userId);
 
-      if (wantRole === "seller" && !existingProfile?.is_seller) {
-        const { error: upgradeErr } = await supabase
-          .from("profiles")
-          .update({ is_seller: true })
-          .eq("id", userId);
-        if (upgradeErr) throw upgradeErr;
+      if (wantRole === "seller" && !existingProfile.is_seller) {
+        // Ghi is_seller không chặn luồng — nếu cột chưa tồn tại (chưa chạy
+        // SQL bản mới), tài khoản coi như tạm thời chỉ đăng nhập được nhờ
+        // role cũ; is_seller sẽ tự đúng sau khi chạy schema.sql.
+        await writeProfileRole(userId, { is_seller: true });
       }
 
-      const currentActive = existingProfile?.active_role || null;
-      if (currentActive && currentActive !== wantRole) {
-        if (!confirmRoleSwitch(currentActive, wantRole)) {
-          await supabase.auth.signOut();
-          return { cancelled: true };
+      if (existingProfile.schemaReady) {
+        const currentActive = existingProfile.active_role || null;
+        if (currentActive && currentActive !== wantRole) {
+          if (!confirmRoleSwitch(currentActive, wantRole)) {
+            await supabase.auth.signOut();
+            return { cancelled: true };
+          }
         }
+        await writeProfileRole(userId, { active_role: wantRole });
       }
-
-      const { error: claimErr } = await supabase
-        .from("profiles")
-        .update({ active_role: wantRole })
-        .eq("id", userId);
-      if (claimErr) throw claimErr;
 
       return { needsEmailConfirmation: false, linkedExisting: true };
     }
@@ -154,7 +194,9 @@ function AuthProvider({ children }) {
       return { needsEmailConfirmation: true };
     }
 
-    await supabase.from("profiles").update({ active_role: wantRole }).eq("id", data.user.id);
+    // Không chặn đăng ký nếu ghi active_role thất bại (vd: chưa chạy SQL
+    // bản mới) — tài khoản vẫn tạo/đăng nhập thành công bình thường.
+    await writeProfileRole(data.user.id, { active_role: wantRole });
     return { needsEmailConfirmation: false };
   }
 
@@ -164,33 +206,28 @@ function AuthProvider({ children }) {
     if (error) throw error;
 
     const userId = data.user.id;
-    const { data: profileData, error: profileErr } = await supabase
-      .from("profiles")
-      .select("is_seller, active_role")
-      .eq("id", userId)
-      .maybeSingle();
-    if (profileErr) throw profileErr;
+    // fetchProfileRow tự chịu được thiếu cột is_seller/active_role (chưa
+    // chạy schema.sql bản mới) — đăng nhập Người bán vẫn hoạt động, dựa
+    // theo cột role cũ, chỉ tạm bỏ qua kiểm tra "đăng nhập song song".
+    const profileData = await fetchProfileRow(userId);
 
-    if (wantRole === "seller" && !profileData?.is_seller) {
+    if (wantRole === "seller" && !profileData.is_seller) {
       await supabase.auth.signOut();
       throw new Error(
         "Tài khoản này chưa đăng ký vai trò Người bán. Vui lòng đăng ký vai trò Người bán trước."
       );
     }
 
-    const currentActive = profileData?.active_role || null;
-    if (currentActive && currentActive !== wantRole) {
-      if (!confirmRoleSwitch(currentActive, wantRole)) {
-        await supabase.auth.signOut();
-        throw new Error("Đã huỷ đăng nhập.");
+    if (profileData.schemaReady) {
+      const currentActive = profileData.active_role || null;
+      if (currentActive && currentActive !== wantRole) {
+        if (!confirmRoleSwitch(currentActive, wantRole)) {
+          await supabase.auth.signOut();
+          throw new Error("Đã huỷ đăng nhập.");
+        }
       }
+      await writeProfileRole(userId, { active_role: wantRole });
     }
-
-    const { error: claimErr } = await supabase
-      .from("profiles")
-      .update({ active_role: wantRole })
-      .eq("id", userId);
-    if (claimErr) throw claimErr;
 
     // Trả về role ngay lập tức (thay vì chờ onAuthStateChange cập nhật state
     // bất đồng bộ) để nơi gọi signIn() biết ngay nên điều hướng tới đâu
@@ -199,14 +236,11 @@ function AuthProvider({ children }) {
   }
 
   // Đăng xuất: giải phóng active_role để tài khoản có thể đăng nhập lại ở
-  // vai trò còn lại (từ tab/thiết bị khác) mà không bị hỏi xác nhận.
+  // vai trò còn lại (từ tab/thiết bị khác) mà không bị hỏi xác nhận. Không
+  // chặn đăng xuất nếu ghi thất bại (vd: chưa chạy schema.sql bản mới).
   async function logout() {
     if (session?.user) {
-      try {
-        await supabase.from("profiles").update({ active_role: null }).eq("id", session.user.id);
-      } catch (err) {
-        console.warn("[AuthProvider] Không xoá được active_role lúc đăng xuất:", err);
-      }
+      await writeProfileRole(session.user.id, { active_role: null });
     }
     await supabase.auth.signOut();
   }
