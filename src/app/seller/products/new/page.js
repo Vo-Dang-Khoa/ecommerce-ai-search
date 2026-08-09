@@ -204,7 +204,7 @@ export default function NewProductPage() {
                   : "bg-gray-900 text-white hover:bg-gray-800 cursor-pointer"
               }`}
             >
-              {uploading ? "Đang tải ảnh lên..." : "Chọn ảnh để tải lên"}
+              {uploading ? "Đang tải ảnh lên..." : "Tải ảnh lên"}
               <input
                 type="file"
                 accept="image/*"
