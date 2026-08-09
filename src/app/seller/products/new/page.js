@@ -20,6 +20,7 @@ export default function NewProductPage() {
   const [desc, setDesc] = useState("");
   const [images, setImages] = useState([]);
   const [imageUrl, setImageUrl] = useState("");
+  const [urlError, setUrlError] = useState("");
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -69,7 +70,14 @@ export default function NewProductPage() {
   }
 
   function handleAddImageUrl() {
-    if (!imageUrl.trim()) return;
+    // Nút này CHỈ thêm ảnh từ URL dán sẵn, KHÔNG tải file lên — nếu ô URL
+    // đang trống thì báo rõ lý do, tránh trường hợp bấm mà "không có tác
+    // dụng gì" như trước (trước đây chỉ return() im lặng, không báo lỗi).
+    if (!imageUrl.trim()) {
+      setUrlError("Vui lòng dán URL ảnh vào ô bên cạnh trước khi bấm \"Thêm URL ảnh\".");
+      return;
+    }
+    setUrlError("");
     setImages((prev) => [...prev, imageUrl.trim()]);
     setImageUrl("");
   }
@@ -185,33 +193,54 @@ export default function NewProductPage() {
               </div>
             )}
 
-            <input
-              type="file"
-              accept="image/*"
-              multiple
-              onChange={handleFiles}
-              disabled={uploading}
-              className="text-sm mb-2"
-            />
-            {uploading && (
-              <p className="text-xs text-gray-500 mb-2">Đang tải ảnh lên Supabase...</p>
-            )}
+            {/* Nút chọn ảnh TỪ MÁY để tải lên Supabase Storage — đây mới là
+                nút thực sự "tải ảnh lên". Bọc <input type="file"> (ẩn) bên
+                trong <label> để có nút bấm rõ ràng thay vì input file mặc
+                định của trình duyệt (nhỏ, dễ bị bỏ qua). */}
+            <label
+              className={`inline-flex items-center gap-2 text-sm px-4 py-2 rounded-md transition-colors ${
+                uploading
+                  ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                  : "bg-gray-900 text-white hover:bg-gray-800 cursor-pointer"
+              }`}
+            >
+              {uploading ? "Đang tải ảnh lên..." : "Chọn ảnh để tải lên"}
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleFiles}
+                disabled={uploading}
+                className="hidden"
+              />
+            </label>
+            <p className="text-xs text-gray-400 mt-1.5 mb-3">
+              Chọn 1 hoặc nhiều ảnh từ máy (tối đa 1.5MB/ảnh) — ảnh sẽ tự động tải lên.
+            </p>
 
+            {/* Cách khác: dán sẵn URL ảnh có trên mạng thay vì tải file —
+                KHÔNG tải file lên, chỉ thêm thẳng URL đã dán vào danh sách
+                ảnh. Đặt tên nút rõ ràng để không nhầm với nút tải ảnh ở
+                trên. */}
             <div className="flex gap-2">
               <input
                 value={imageUrl}
-                onChange={(e) => setImageUrl(e.target.value)}
-                placeholder="Hoặc dán URL ảnh..."
+                onChange={(e) => {
+                  setImageUrl(e.target.value);
+                  if (urlError) setUrlError("");
+                }}
+                placeholder="Hoặc dán URL ảnh có sẵn..."
                 className="flex-1 border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-gray-900"
               />
               <button
                 type="button"
                 onClick={handleAddImageUrl}
-                className="text-sm border border-gray-300 rounded-md px-3 py-2 hover:border-gray-900"
+                className="text-sm border border-gray-300 rounded-md px-3 py-2 hover:border-gray-900 shrink-0"
               >
-                Thêm ảnh
+                Thêm URL ảnh
               </button>
             </div>
+            {urlError && <p className="text-xs text-red-600 mt-1.5">{urlError}</p>}
           </div>
 
           {error && <p className="text-sm text-red-600">{error}</p>}
