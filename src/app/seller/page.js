@@ -290,6 +290,26 @@ export default function SellerPage() {
     );
   }
 
+  if (user.role !== "seller") {
+    return (
+      <main className="flex-1 bg-amber-50">
+        <div className="max-w-md mx-auto px-4 py-24 text-center">
+          <p className="text-gray-600 mb-6">
+            Tài khoản của bạn đang ở vai trò <strong>Người mua</strong>, không thể truy cập
+            kênh người bán. Hãy đăng ký một tài khoản khác với vai trò Người bán nếu bạn
+            muốn mở gian hàng.
+          </p>
+          <Link
+            href="/"
+            className="bg-gray-900 text-white px-5 py-2.5 rounded-md hover:bg-gray-800 transition-colors"
+          >
+            Về trang chủ
+          </Link>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="flex-1 bg-amber-50">
       {loadError && (

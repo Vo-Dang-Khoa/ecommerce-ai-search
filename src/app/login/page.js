@@ -1,30 +1,41 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../providers";
 
+function mapAuthError(err) {
+  const msg = err?.message || "";
+  if (msg.includes("Invalid login credentials")) {
+    return "Email hoặc mật khẩu không đúng.";
+  }
+  if (msg.includes("Email not confirmed")) {
+    return "Email chưa được xác nhận. Vui lòng kiểm tra hộp thư để xác nhận tài khoản trước.";
+  }
+  return msg || "Đăng nhập thất bại, vui lòng thử lại.";
+}
+
 export default function LoginPage() {
   const router = useRouter();
-  const { login } = useAuth();
+  const { signIn } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
-    const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-    if (!emailValid) {
-      setError("Email không hợp lệ.");
-      return;
-    }
-    if (password.length < 6) {
-      setError("Mật khẩu phải có ít nhất 6 ký tự.");
-      return;
-    }
     setError("");
-    login(email);
-    router.push("/");
+    setSubmitting(true);
+    try {
+      await signIn({ email, password });
+      router.push("/");
+    } catch (err) {
+      setError(mapAuthError(err));
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -35,7 +46,7 @@ export default function LoginPage() {
             Đăng nhập
           </h1>
           <p className="text-sm text-gray-500 text-center mb-8">
-            Bản demo đồ án môn học — không kết nối máy chủ xác thực thật.
+            Đăng nhập bằng tài khoản ShopAI của bạn.
           </p>
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
@@ -68,11 +79,19 @@ export default function LoginPage() {
 
             <button
               type="submit"
-              className="bg-gray-900 text-white py-2.5 rounded-md font-medium hover:bg-gray-800 transition-colors mt-2"
+              disabled={submitting}
+              className="bg-gray-900 text-white py-2.5 rounded-md font-medium hover:bg-gray-800 transition-colors mt-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Đăng nhập
+              {submitting ? "Đang đăng nhập..." : "Đăng nhập"}
             </button>
           </form>
+
+          <p className="text-sm text-gray-500 text-center mt-6">
+            Chưa có tài khoản?{" "}
+            <Link href="/register" className="text-gray-900 font-medium hover:underline">
+              Đăng ký ngay
+            </Link>
+          </p>
         </div>
       </div>
     </main>

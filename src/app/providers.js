@@ -10,38 +10,95 @@ const AuthContext = createContext(null);
 const ShopContext = createContext(null);
 
 const CART_KEY = "shopai_cart";
-const AUTH_KEY = "shopai_user";
 
-// Đăng nhập ở đây vẫn chỉ là mô phỏng (nhập email, lưu localStorage), CHƯA
-// dùng Supabase Auth thật. Xem lưu ý bảo mật trong supabase/schema.sql.
+// Đăng nhập/đăng ký thật bằng Supabase Auth (email + mật khẩu). Vai trò
+// (buyer/seller) được lưu trong bảng `profiles`, tự tạo qua trigger
+// `on_auth_user_created` (xem supabase/schema.sql) ngay khi signUp() thành
+// công, lấy từ metadata `role` gửi kèm lúc đăng ký.
 function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
+  const [session, setSession] = useState(null);
+  const [profile, setProfile] = useState(null);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(AUTH_KEY);
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time hydration from localStorage on mount
-      if (raw) setUser(JSON.parse(raw));
-    } catch {
-      // ignore corrupted storage
+    let cancelled = false;
+
+    async function loadProfile(userId) {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("role, email")
+        .eq("id", userId)
+        .maybeSingle();
+      if (cancelled) return;
+      if (error) {
+        console.error("[AuthProvider] Không tải được profile:", error);
+        setProfile(null);
+      } else {
+        setProfile(data);
+      }
     }
-    setHydrated(true);
+
+    async function init() {
+      const { data } = await supabase.auth.getSession();
+      if (cancelled) return;
+      setSession(data.session);
+      if (data.session?.user) {
+        await loadProfile(data.session.user.id);
+      }
+      if (!cancelled) setHydrated(true);
+    }
+
+    init();
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      setSession(newSession);
+      if (newSession?.user) {
+        loadProfile(newSession.user.id);
+      } else {
+        setProfile(null);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      listener.subscription.unsubscribe();
+    };
   }, []);
 
-  function login(email) {
-    const nextUser = { email };
-    setUser(nextUser);
-    localStorage.setItem(AUTH_KEY, JSON.stringify(nextUser));
+  // role: "buyer" | "seller" — chọn lúc đăng ký, lưu vào auth metadata rồi
+  // trigger DB copy sang bảng profiles.
+  async function signUp({ email, password, role }) {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { role } },
+    });
+    if (error) throw error;
+    // Nếu project bật "Confirm email", data.session sẽ là null cho tới khi
+    // người dùng bấm link xác nhận trong hộp thư — trang /register cần biết
+    // điều này để hiện thông báo phù hợp thay vì điều hướng ngay.
+    return { needsEmailConfirmation: !data.session };
   }
 
-  function logout() {
-    setUser(null);
-    localStorage.removeItem(AUTH_KEY);
+  async function signIn({ email, password }) {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
   }
+
+  async function logout() {
+    await supabase.auth.signOut();
+  }
+
+  const user = session?.user
+    ? {
+        id: session.user.id,
+        email: session.user.email,
+        role: profile?.role ?? "buyer",
+      }
+    : null;
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, hydrated }}>
+    <AuthContext.Provider value={{ user, signUp, signIn, logout, hydrated }}>
       {children}
     </AuthContext.Provider>
   );
@@ -53,6 +110,7 @@ function AuthProvider({ children }) {
 function mapShop(row) {
   return {
     id: row.id,
+    ownerId: row.owner_id,
     ownerEmail: row.owner_email,
     name: row.name,
     description: row.description,
@@ -121,13 +179,19 @@ function ShopProvider({ children }) {
     };
   }, []);
 
-  const myShop = user ? shops.find((s) => s.ownerEmail === user.email) ?? null : null;
+  const myShop = user ? shops.find((s) => s.ownerId === user.id) ?? null : null;
 
   async function registerShop({ name, description, phone }) {
     if (!user) throw new Error("Bạn cần đăng nhập trước.");
+    if (user.role !== "seller") {
+      throw new Error(
+        "Tài khoản của bạn đang ở vai trò Người mua, không thể tạo gian hàng."
+      );
+    }
     const { data, error } = await supabase
       .from("shops")
       .insert({
+        owner_id: user.id,
         owner_email: user.email,
         name,
         description: description || "",

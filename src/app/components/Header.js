@@ -77,13 +77,20 @@ export default function Header() {
         </form>
 
         <div className="flex items-center gap-4 text-sm text-gray-600 shrink-0">
-          <Link href="/seller" className="hidden sm:inline hover:text-gray-900">
-            Người bán đăng nhập
-          </Link>
+          {user?.role === "seller" && (
+            <Link href="/seller" className="hidden sm:inline hover:text-gray-900">
+              Kênh người bán
+            </Link>
+          )}
 
           {user ? (
             <div className="flex items-center gap-3">
-              <span className="hidden sm:inline text-gray-700">{user.email}</span>
+              <span className="hidden sm:inline items-center gap-1.5 text-gray-700">
+                {user.email}{" "}
+                <span className="text-xs text-amber-700 bg-amber-50 rounded-full px-2 py-0.5">
+                  {user.role === "seller" ? "Người bán" : "Người mua"}
+                </span>
+              </span>
               <button
                 onClick={logout}
                 className="text-sm bg-gray-900 text-white px-4 py-2 rounded-md hover:bg-gray-800"
@@ -92,9 +99,17 @@ export default function Header() {
               </button>
             </div>
           ) : (
-            <Link href="/login" className="hover:text-gray-900">
-              Người mua đăng nhập
-            </Link>
+            <div className="flex items-center gap-3">
+              <Link href="/login" className="hover:text-gray-900">
+                Đăng nhập
+              </Link>
+              <Link
+                href="/register"
+                className="text-sm bg-gray-900 text-white px-4 py-2 rounded-md hover:bg-gray-800"
+              >
+                Đăng ký
+              </Link>
+            </div>
           )}
 
           <Link href="/cart" className="relative hover:text-gray-900">
