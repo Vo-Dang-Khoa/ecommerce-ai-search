@@ -148,8 +148,8 @@ function ShopInfoCard({ shop }) {
   }
 
   return (
-    <div className="border border-gray-200 rounded-xl p-6 flex items-start justify-between mb-8">
-      <div>
+    <div className="border border-gray-200 rounded-xl p-6 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-8">
+      <div className="min-w-0">
         <h2 className="text-xl font-bold text-gray-900">{shop.name}</h2>
         {shop.phone && <p className="text-sm text-gray-500 mt-1">📞 {shop.phone}</p>}
         {shop.description && (
@@ -158,7 +158,7 @@ function ShopInfoCard({ shop }) {
       </div>
       <button
         onClick={() => setEditing(true)}
-        className="text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-md px-3 py-1.5"
+        className="self-start shrink-0 text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-md px-3 py-1.5"
       >
         Sửa thông tin
       </button>
@@ -183,49 +183,54 @@ function ProductRow({ product }) {
   }
 
   return (
-    <div className="flex items-center gap-4 border border-gray-200 rounded-xl p-4">
-      {image ? (
-        // eslint-disable-next-line @next/next/no-img-element -- user-uploaded data URLs/arbitrary URLs
-        <img
-          src={image}
-          alt={product.name}
-          className="w-14 h-14 object-cover rounded-md bg-amber-50"
-        />
-      ) : (
-        <span className="text-3xl w-14 text-center">🧁</span>
-      )}
-      <div className="flex-1">
-        <h3 className="font-semibold text-gray-900">{product.name}</h3>
-        <p className="text-xs text-amber-700 bg-amber-50 rounded-full px-2 py-0.5 w-fit mt-1">
-          {product.category}
-        </p>
-      </div>
-      <div className="text-right">
-        {onSale && (
-          <p className="text-xs text-gray-400 line-through">
-            {product.price.toLocaleString("vi-VN")}đ
+    <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 border border-gray-200 rounded-xl p-4">
+      <div className="flex items-center gap-4 flex-1 min-w-0">
+        {image ? (
+          // eslint-disable-next-line @next/next/no-img-element -- user-uploaded data URLs/arbitrary URLs
+          <img
+            src={image}
+            alt={product.name}
+            className="w-14 h-14 object-cover rounded-md bg-amber-50 shrink-0"
+          />
+        ) : (
+          <span className="text-3xl w-14 text-center shrink-0">🧁</span>
+        )}
+        <div className="flex-1 min-w-0">
+          <h3 className="font-semibold text-gray-900 truncate">{product.name}</h3>
+          <p className="text-xs text-amber-700 bg-amber-50 rounded-full px-2 py-0.5 w-fit mt-1">
+            {product.category}
           </p>
-        )}
-        <p className="font-semibold text-gray-900">
-          {effectivePrice.toLocaleString("vi-VN")}đ
-        </p>
-        {onSale && (
-          <p className="text-xs text-red-600">-{product.promotion.percent}% khuyến mãi</p>
-        )}
+        </div>
       </div>
-      <div className="flex flex-col gap-1.5">
-        <Link
-          href={`/seller/products/${product.id}`}
-          className="text-sm text-center bg-gray-900 text-white px-3 py-1.5 rounded-md hover:bg-gray-800"
-        >
-          Quản lý
-        </Link>
-        <button
-          onClick={handleDelete}
-          className="text-sm text-red-600 hover:text-red-700"
-        >
-          Xoá
-        </button>
+
+      <div className="flex items-center justify-between sm:justify-end gap-4">
+        <div className="text-left sm:text-right shrink-0">
+          {onSale && (
+            <p className="text-xs text-gray-400 line-through">
+              {product.price.toLocaleString("vi-VN")}đ
+            </p>
+          )}
+          <p className="font-semibold text-gray-900">
+            {effectivePrice.toLocaleString("vi-VN")}đ
+          </p>
+          {onSale && (
+            <p className="text-xs text-red-600">-{product.promotion.percent}% khuyến mãi</p>
+          )}
+        </div>
+        <div className="flex flex-col gap-1.5 shrink-0">
+          <Link
+            href={`/seller/products/${product.id}`}
+            className="text-sm text-center bg-gray-900 text-white px-3 py-1.5 rounded-md hover:bg-gray-800"
+          >
+            Quản lý
+          </Link>
+          <button
+            onClick={handleDelete}
+            className="text-sm text-red-600 hover:text-red-700"
+          >
+            Xoá
+          </button>
+        </div>
       </div>
     </div>
   );

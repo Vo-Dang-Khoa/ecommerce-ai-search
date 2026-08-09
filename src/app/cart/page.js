@@ -46,62 +46,67 @@ export default function CartPage() {
                 return (
                   <div
                     key={product.id}
-                    className="flex items-center gap-4 border border-gray-200 rounded-xl p-4"
+                    className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 border border-gray-200 rounded-xl p-4"
                   >
-                    {image ? (
-                      // eslint-disable-next-line @next/next/no-img-element -- user-uploaded data URLs/arbitrary URLs
-                      <img
-                        src={image}
-                        alt={product.name}
-                        className="w-12 h-12 object-cover rounded-md bg-amber-50"
-                      />
-                    ) : (
-                      <span className="text-3xl">{product.emoji}</span>
-                    )}
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-gray-900">
-                        {product.name}
-                      </h3>
-                      <p className="text-sm text-gray-500">
-                        {unitPrice.toLocaleString("vi-VN")}đ / sản phẩm
-                      </p>
+                    <div className="flex items-center gap-4 flex-1 min-w-0">
+                      {image ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- user-uploaded data URLs/arbitrary URLs
+                        <img
+                          src={image}
+                          alt={product.name}
+                          className="w-12 h-12 object-cover rounded-md bg-amber-50 shrink-0"
+                        />
+                      ) : (
+                        <span className="text-3xl shrink-0">{product.emoji}</span>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-semibold text-gray-900 truncate">
+                          {product.name}
+                        </h3>
+                        <p className="text-sm text-gray-500">
+                          {unitPrice.toLocaleString("vi-VN")}đ / sản phẩm
+                        </p>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
+
+                    <div className="flex items-center justify-between sm:justify-end gap-4 sm:gap-6">
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          onClick={() => updateQty(product.id, qty - 1)}
+                          className="w-9 h-9 sm:w-8 sm:h-8 rounded-md border border-gray-300 text-gray-700 hover:border-gray-900"
+                        >
+                          -
+                        </button>
+                        <span className="w-6 text-center">{qty}</span>
+                        <button
+                          onClick={() => updateQty(product.id, qty + 1)}
+                          className="w-9 h-9 sm:w-8 sm:h-8 rounded-md border border-gray-300 text-gray-700 hover:border-gray-900"
+                        >
+                          +
+                        </button>
+                      </div>
+                      <span className="font-semibold text-gray-900 sm:w-28 sm:text-right shrink-0">
+                        {(unitPrice * qty).toLocaleString("vi-VN")}đ
+                      </span>
                       <button
-                        onClick={() => updateQty(product.id, qty - 1)}
-                        className="w-8 h-8 rounded-md border border-gray-300 text-gray-700 hover:border-gray-900"
+                        onClick={() => removeItem(product.id)}
+                        className="text-sm text-red-600 hover:text-red-700 shrink-0"
                       >
-                        -
-                      </button>
-                      <span className="w-6 text-center">{qty}</span>
-                      <button
-                        onClick={() => updateQty(product.id, qty + 1)}
-                        className="w-8 h-8 rounded-md border border-gray-300 text-gray-700 hover:border-gray-900"
-                      >
-                        +
+                        Xoá
                       </button>
                     </div>
-                    <span className="font-semibold text-gray-900 w-28 text-right">
-                      {(unitPrice * qty).toLocaleString("vi-VN")}đ
-                    </span>
-                    <button
-                      onClick={() => removeItem(product.id)}
-                      className="text-sm text-red-600 hover:text-red-700"
-                    >
-                      Xoá
-                    </button>
                   </div>
                 );
               })}
             </div>
 
-            <div className="flex items-center justify-between border-t border-gray-200 pt-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-t border-gray-200 pt-6">
               <span className="text-lg font-semibold text-gray-900">
                 Tổng cộng: {totalPrice.toLocaleString("vi-VN")}đ
               </span>
               <button
                 onClick={handleCheckout}
-                className="bg-gray-900 text-white px-6 py-3 rounded-md font-medium hover:bg-gray-800 transition-colors"
+                className="w-full sm:w-auto bg-gray-900 text-white px-6 py-3 rounded-md font-medium hover:bg-gray-800 transition-colors"
               >
                 Đặt hàng
               </button>
