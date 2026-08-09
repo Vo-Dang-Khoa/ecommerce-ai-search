@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import ProductCard from "../components/ProductCard";
 
 const SUGGESTIONS = [
@@ -10,15 +11,17 @@ const SUGGESTIONS = [
   "Bánh ít ngọt, hợp người ăn kiêng đường",
 ];
 
-export default function SearchPage() {
-  const [query, setQuery] = useState("");
+function SearchPageInner() {
+  const searchParams = useSearchParams();
+  const initialQuery = searchParams.get("q") || "";
+
+  const [query, setQuery] = useState(initialQuery);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [results, setResults] = useState(null);
 
-  async function handleSearch(e) {
-    e?.preventDefault();
-    if (!query.trim()) return;
+  async function runSearch(q) {
+    if (!q.trim()) return;
 
     setLoading(true);
     setError("");
@@ -28,7 +31,7 @@ export default function SearchPage() {
       const res = await fetch("/api/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query }),
+        body: JSON.stringify({ query: q }),
       });
       const data = await res.json();
 
@@ -43,6 +46,17 @@ export default function SearchPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time auto search for the query present in the URL on first load
+    if (initialQuery) runSearch(initialQuery);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only auto-run once for the query present in the URL on first load
+  }, []);
+
+  function handleSearch(e) {
+    e?.preventDefault();
+    runSearch(query);
   }
 
   return (
@@ -117,5 +131,13 @@ export default function SearchPage() {
         )}
       </div>
     </main>
+  );
+}
+
+export default function SearchPage() {
+  return (
+    <Suspense fallback={<main className="flex-1 bg-white" />}>
+      <SearchPageInner />
+    </Suspense>
   );
 }
