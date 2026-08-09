@@ -138,16 +138,30 @@ function AuthProvider({ children }) {
       options: { data: { role: wantRole } },
     });
 
-    if (error) {
-      const alreadyRegistered =
-        error.message?.includes("already registered") ||
-        error.message?.includes("already been registered");
-      if (!alreadyRegistered) throw error;
+    // Supabase Auth báo "email đã tồn tại" theo 2 kiểu tuỳ cấu hình project:
+    //  1. Trả lỗi rõ ràng ("User already registered").
+    //  2. (Phổ biến khi bật "Confirm email", để chống dò xem email nào đã
+    //     đăng ký) TRẢ VỀ THÀNH CÔNG GIẢ: có data.user nhưng
+    //     data.user.identities là MẢNG RỖNG, không có session — trông y hệt
+    //     "tài khoản mới, cần xác nhận email" (needsEmailConfirmation) NHƯNG
+    //     THỰC RA KHÔNG GỬI EMAIL NÀO CẢ. Đây là nguyên nhân gây ra đúng 2
+    //     hiện tượng: "không có email xác nhận" + "không đăng ký được" —
+    //     trước đây code chỉ bắt case 1 nên rơi vào case 2 là bị "kẹt" ở màn
+    //     hình "kiểm tra email của bạn" mãi mãi mà không có gì xảy ra.
+    const alreadyRegistered =
+      (error &&
+        (error.message?.includes("already registered") ||
+          error.message?.includes("already been registered"))) ||
+      (!error &&
+        data?.user &&
+        Array.isArray(data.user.identities) &&
+        data.user.identities.length === 0);
 
+    if (alreadyRegistered) {
       // Email này đã có tài khoản (có thể đã đăng ký ở vai trò còn lại
       // trước đó) — Supabase Auth không cho 2 tài khoản dùng chung 1 email,
-      // nên thay vì báo lỗi, ta xác thực bằng đúng mật khẩu vừa nhập; nếu
-      // khớp thì THÊM vai trò mới vào CHÍNH tài khoản đó.
+      // nên thay vì báo lỗi/giả vờ thành công, ta xác thực bằng đúng mật
+      // khẩu vừa nhập; nếu khớp thì THÊM vai trò mới vào CHÍNH tài khoản đó.
       const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -186,10 +200,14 @@ function AuthProvider({ children }) {
       return { needsEmailConfirmation: false, linkedExisting: true };
     }
 
+    if (error) throw error;
+
     // Nếu project bật "Confirm email", data.session sẽ là null cho tới khi
     // người dùng bấm link xác nhận trong hộp thư — trang /register cần biết
     // điều này để hiện thông báo phù hợp thay vì điều hướng ngay. Chưa có
-    // session thì cũng chưa có gì để đánh dấu active_role.
+    // session thì cũng chưa có gì để đánh dấu active_role. Tới đây chắc
+    // chắn là tài khoản MỚI (không phải case "đã tồn tại" ở trên) nên
+    // Supabase sẽ thật sự gửi email xác nhận.
     if (!data.session) {
       return { needsEmailConfirmation: true };
     }
