@@ -21,6 +21,9 @@ export default function Header() {
           <Link href="/search" className="hover:text-gray-900">
             Tìm kiếm AI
           </Link>
+          <Link href="/seller" className="hover:text-gray-900">
+            Kênh người bán
+          </Link>
           <Link href="/loi-cam-on" className="hover:text-gray-900">
             Lời cảm ơn
           </Link>
