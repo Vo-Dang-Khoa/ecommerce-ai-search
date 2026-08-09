@@ -1,40 +1,25 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { useCart } from "../providers";
+import { useRouter } from "next/navigation";
+import { useAuth, useCart } from "../providers";
 import { getEffectivePrice, getProductImage } from "@/lib/shops";
 
 export default function CartPage() {
-  const { items, totalPrice, updateQty, removeItem, clearCart } = useCart();
-  const [ordered, setOrdered] = useState(false);
+  const router = useRouter();
+  const { user } = useAuth();
+  const { items, totalPrice, updateQty, removeItem } = useCart();
 
+  // Bấm "Đặt hàng": chưa đăng nhập -> điều hướng sang trang "Người mua
+  // đăng nhập" (kèm redirect=/checkout để đăng nhập/đăng ký xong quay
+  // thẳng lại bước thanh toán). Đã đăng nhập -> vào thẳng /checkout để
+  // chọn phương thức thanh toán, giao hàng và xác nhận đơn.
   function handleCheckout() {
-    clearCart();
-    setOrdered(true);
-  }
-
-  if (ordered) {
-    return (
-      <main className="flex-1 bg-white">
-        <div className="max-w-2xl mx-auto px-4 py-20 text-center">
-          <p className="text-5xl mb-4">🎉</p>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">
-            Đặt hàng thành công!
-          </h1>
-          <p className="text-gray-600 mb-8">
-            Đây là bản demo đồ án môn học, đơn hàng chưa được gửi tới hệ
-            thống thật.
-          </p>
-          <Link
-            href="/products"
-            className="bg-gray-900 text-white px-5 py-2.5 rounded-md hover:bg-gray-800 transition-colors"
-          >
-            Tiếp tục mua sắm
-          </Link>
-        </div>
-      </main>
-    );
+    if (!user) {
+      router.push("/login?role=buyer&redirect=/checkout");
+      return;
+    }
+    router.push("/checkout");
   }
 
   return (

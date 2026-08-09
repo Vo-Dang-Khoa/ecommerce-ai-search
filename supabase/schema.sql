@@ -27,6 +27,11 @@ create table if not exists profiles (
   created_at timestamptz not null default now()
 );
 
+-- v3: thêm số điện thoại + địa chỉ giao hàng của khách (Người mua), dùng ở
+-- trang /checkout để hiển thị/lưu lại thông tin liên hệ khi đặt hàng.
+alter table profiles add column if not exists phone text not null default '';
+alter table profiles add column if not exists address text not null default '';
+
 alter table profiles enable row level security;
 
 drop policy if exists "Users can read own profile" on profiles;

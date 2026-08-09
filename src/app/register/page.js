@@ -31,6 +31,19 @@ function RegisterPageInner() {
   const role = searchParams.get("role") === "seller" ? "seller" : "buyer";
   const roleLabel = role === "seller" ? "Người bán" : "Người mua";
 
+  // redirect: trang cần quay lại sau khi đăng ký/đăng nhập thành công (vd:
+  // bấm "Đặt hàng" ở giỏ hàng lúc chưa có tài khoản -> /register?role=buyer&
+  // redirect=/checkout -> xong xuôi quay thẳng lại /checkout).
+  const redirect = searchParams.get("redirect") || "";
+  const loginHref = redirect
+    ? `/login?role=${role}&redirect=${encodeURIComponent(redirect)}`
+    : `/login?role=${role}`;
+
+  function destinationFor(loggedInRole) {
+    if (redirect) return redirect;
+    return loggedInRole === "seller" ? "/seller" : "/";
+  }
+
   // "register": hiện bảng "{roleLabel} đăng ký".
   // "login": hiện bảng "{roleLabel} đăng nhập" NGAY TẠI CHỖ, thay hẳn cho
   // bảng đăng ký (không phải mở dropdown nổi lên trên) — bấm "Đăng nhập"
@@ -67,7 +80,7 @@ function RegisterPageInner() {
       if (needsEmailConfirmation) {
         setNeedsConfirmation(true);
       } else {
-        router.push(role === "seller" ? "/seller" : "/");
+        router.push(destinationFor(role));
       }
     } catch (err) {
       setError(mapAuthError(err));
@@ -77,7 +90,7 @@ function RegisterPageInner() {
   }
 
   function handleLoginSuccess(loggedInRole) {
-    router.push(loggedInRole === "seller" ? "/seller" : "/");
+    router.push(destinationFor(loggedInRole));
   }
 
   if (needsConfirmation) {
@@ -93,7 +106,7 @@ function RegisterPageInner() {
               link trong email để kích hoạt tài khoản, sau đó quay lại đăng nhập.
             </p>
             <Link
-              href="/login"
+              href={loginHref}
               className="bg-gray-900 text-white px-5 py-2.5 rounded-md hover:bg-gray-800 transition-colors inline-block"
             >
               Đến trang đăng nhập

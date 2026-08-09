@@ -26,7 +26,7 @@ function AuthProvider({ children }) {
     async function loadProfile(userId) {
       const { data, error } = await supabase
         .from("profiles")
-        .select("role, email")
+        .select("role, email, phone, address")
         .eq("id", userId)
         .maybeSingle();
       if (cancelled) return;
@@ -98,16 +98,37 @@ function AuthProvider({ children }) {
     await supabase.auth.signOut();
   }
 
+  // Lưu lại số điện thoại/địa chỉ giao hàng của khách (dùng ở trang
+  // /checkout) vào bảng profiles, để lần đặt hàng sau tự điền sẵn.
+  async function updateProfile({ phone, address }) {
+    if (!session?.user) throw new Error("Bạn cần đăng nhập trước.");
+    const patch = {};
+    if (phone !== undefined) patch.phone = phone;
+    if (address !== undefined) patch.address = address;
+
+    const { error } = await supabase
+      .from("profiles")
+      .update(patch)
+      .eq("id", session.user.id);
+    if (error) throw error;
+
+    setProfile((prev) => ({ ...prev, ...patch }));
+  }
+
   const user = session?.user
     ? {
         id: session.user.id,
         email: session.user.email,
         role: profile?.role ?? "buyer",
+        phone: profile?.phone ?? "",
+        address: profile?.address ?? "",
       }
     : null;
 
   return (
-    <AuthContext.Provider value={{ user, signUp, signIn, logout, hydrated }}>
+    <AuthContext.Provider
+      value={{ user, signUp, signIn, logout, updateProfile, hydrated }}
+    >
       {children}
     </AuthContext.Provider>
   );

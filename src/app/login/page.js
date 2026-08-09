@@ -15,7 +15,19 @@ function LoginPageInner() {
   const role = searchParams.get("role") === "seller" ? "seller" : "buyer";
   const roleLabel = role === "seller" ? "Người bán" : "Người mua";
 
+  // redirect: trang cần quay lại sau khi đăng nhập thành công (vd: bấm
+  // "Đặt hàng" ở giỏ hàng lúc chưa đăng nhập -> /login?role=buyer&redirect=
+  // /checkout -> đăng nhập xong quay thẳng lại /checkout thay vì trang chủ).
+  const redirect = searchParams.get("redirect") || "";
+  const registerHref = redirect
+    ? `/register?role=${role}&redirect=${encodeURIComponent(redirect)}`
+    : `/register?role=${role}`;
+
   function handleLoginSuccess(loggedInRole) {
+    if (redirect) {
+      router.push(redirect);
+      return;
+    }
     router.push(loggedInRole === "seller" ? "/seller" : "/");
   }
 
@@ -35,7 +47,7 @@ function LoginPageInner() {
           <p className="text-sm text-gray-500 text-center mt-6">
             Chưa có tài khoản?{" "}
             <Link
-              href={`/register?role=${role}`}
+              href={registerHref}
               className="text-gray-900 font-medium hover:underline"
             >
               Đăng ký
