@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useAuth, useCart } from "../providers";
-import AuthDropdown from "./AuthDropdown";
 
 const SEARCH_MODES = [
   { href: "/search/image", icon: "📷", label: "Tìm kiếm bằng hình ảnh" },
@@ -41,14 +40,17 @@ export default function Header() {
             </Link>
 
             {/* Người bán: đã đăng nhập với vai trò seller -> vào thẳng kênh
-                người bán. Chưa đăng nhập (hoặc đang là buyer) -> mở dropdown
-                đăng nhập/đăng ký dành cho người bán. */}
+                người bán. Chưa đăng nhập (hoặc đang là buyer) -> điều hướng
+                sang trang /login?role=seller, hiện bảng "Người bán đăng
+                nhập" ngay trong thân trang (KHÔNG dùng dropdown nổi). */}
             {user?.role === "seller" ? (
               <Link href="/seller" className="hover:text-gray-900">
                 Người bán
               </Link>
             ) : (
-              <AuthDropdown triggerLabel="Người bán" registerRole="seller" />
+              <Link href="/login?role=seller" className="hover:text-gray-900">
+                Người bán
+              </Link>
             )}
           </nav>
         </div>
@@ -105,9 +107,12 @@ export default function Header() {
               </button>
             </div>
           ) : (
-            /* Đăng nhập: dành cho người mua, mở dropdown có sẵn nút Đăng ký
-               bên trong cho người mua chưa có tài khoản. */
-            <AuthDropdown triggerLabel="Đăng nhập" registerRole="buyer" />
+            /* Đăng nhập: dành cho người mua. Chưa đăng nhập -> điều hướng
+               sang trang /login?role=buyer, hiện bảng "Người mua đăng
+               nhập" ngay trong thân trang (KHÔNG dùng dropdown nổi). */
+            <Link href="/login?role=buyer" className="hover:text-gray-900">
+              Đăng nhập
+            </Link>
           )}
 
           <Link href="/cart" className="relative hover:text-gray-900">

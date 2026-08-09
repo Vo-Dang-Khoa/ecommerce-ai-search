@@ -3,18 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { useAuth } from "../providers";
-
-function mapAuthError(err) {
-  const msg = err?.message || "";
-  if (msg.includes("Invalid login credentials")) {
-    return "Email hoặc mật khẩu không đúng.";
-  }
-  if (msg.includes("Email not confirmed")) {
-    return "Email chưa được xác nhận. Vui lòng kiểm tra hộp thư.";
-  }
-  return msg || "Đăng nhập thất bại, vui lòng thử lại.";
-}
+import QuickLoginForm from "./QuickLoginForm";
 
 /**
  * Nút mở dropdown đăng nhập nhanh ngay trong header, bên dưới có link đăng
@@ -31,14 +20,8 @@ export default function AuthDropdown({
   triggerClassName = "hover:text-gray-900",
 }) {
   const router = useRouter();
-  const { signIn } = useAuth();
   const containerRef = useRef(null);
-
   const [open, setOpen] = useState(false);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     function handleClickOutside(e) {
@@ -53,26 +36,13 @@ export default function AuthDropdown({
   }, [open]);
 
   function toggleOpen() {
-    setError("");
     setOpen((v) => !v);
   }
 
-  async function handleSubmit(e) {
-    e.preventDefault();
-    setError("");
-    setSubmitting(true);
-    try {
-      const { role } = await signIn({ email, password });
-      setOpen(false);
-      setEmail("");
-      setPassword("");
-      if (role === "seller") {
-        router.push("/seller");
-      }
-    } catch (err) {
-      setError(mapAuthError(err));
-    } finally {
-      setSubmitting(false);
+  function handleLoginSuccess(role) {
+    setOpen(false);
+    if (role === "seller") {
+      router.push("/seller");
     }
   }
 
@@ -87,32 +57,8 @@ export default function AuthDropdown({
           <p className="text-sm font-semibold text-gray-900 mb-3">
             {registerRole === "seller" ? "Người bán đăng nhập" : "Người mua đăng nhập"}
           </p>
-          <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="Email"
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-gray-900"
-            />
-            <input
-              type="password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Mật khẩu"
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-gray-900"
-            />
-            {error && <p className="text-xs text-red-600">{error}</p>}
-            <button
-              type="submit"
-              disabled={submitting}
-              className="bg-gray-900 text-white py-2 rounded-md text-sm font-medium hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {submitting ? "Đang đăng nhập..." : "Đăng nhập"}
-            </button>
-          </form>
+
+          <QuickLoginForm onSuccess={handleLoginSuccess} />
 
           <div className="border-t border-gray-100 mt-4 pt-4 text-center">
             <p className="text-xs text-gray-500 mb-2">Chưa có tài khoản?</p>
