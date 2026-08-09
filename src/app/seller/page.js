@@ -12,14 +12,18 @@ function RegisterShopForm() {
   const [description, setDescription] = useState("");
   const [error, setError] = useState("");
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
     if (name.trim().length < 3) {
       setError("Tên gian hàng phải có ít nhất 3 ký tự.");
       return;
     }
     setError("");
-    registerShop({ name: name.trim(), phone: phone.trim(), description: description.trim() });
+    try {
+      await registerShop({ name: name.trim(), phone: phone.trim(), description: description.trim() });
+    } catch (err) {
+      setError(err.message || "Đăng ký gian hàng thất bại, vui lòng thử lại.");
+    }
   }
 
   return (
@@ -88,11 +92,17 @@ function ShopInfoCard({ shop }) {
   const [name, setName] = useState(shop.name);
   const [phone, setPhone] = useState(shop.phone);
   const [description, setDescription] = useState(shop.description);
+  const [error, setError] = useState("");
 
-  function handleSave(e) {
+  async function handleSave(e) {
     e.preventDefault();
-    updateShop({ name: name.trim(), phone: phone.trim(), description: description.trim() });
-    setEditing(false);
+    setError("");
+    try {
+      await updateShop({ name: name.trim(), phone: phone.trim(), description: description.trim() });
+      setEditing(false);
+    } catch (err) {
+      setError(err.message || "Cập nhật gian hàng thất bại, vui lòng thử lại.");
+    }
   }
 
   if (editing) {
@@ -117,6 +127,7 @@ function ShopInfoCard({ shop }) {
           rows={2}
           className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-gray-900 resize-none"
         />
+        {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex gap-2">
           <button
             type="submit"
@@ -161,9 +172,13 @@ function ProductRow({ product }) {
   const effectivePrice = getEffectivePrice(product);
   const onSale = effectivePrice < product.price;
 
-  function handleDelete() {
+  async function handleDelete() {
     if (confirm(`Xoá sản phẩm "${product.name}"?`)) {
-      removeProduct(product.id);
+      try {
+        await removeProduct(product.id);
+      } catch (err) {
+        alert(err.message || "Xoá sản phẩm thất bại, vui lòng thử lại.");
+      }
     }
   }
 
@@ -253,7 +268,7 @@ function ShopDashboard({ shop }) {
 
 export default function SellerPage() {
   const { user, hydrated: authHydrated } = useAuth();
-  const { myShop, hydrated: shopHydrated } = useShop();
+  const { myShop, hydrated: shopHydrated, loadError } = useShop();
 
   if (!authHydrated || !shopHydrated) return null;
 
@@ -277,6 +292,13 @@ export default function SellerPage() {
 
   return (
     <main className="flex-1 bg-amber-50">
+      {loadError && (
+        <div className="max-w-4xl mx-auto px-4 pt-6">
+          <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-md px-4 py-3">
+            {loadError}
+          </p>
+        </div>
+      )}
       {myShop ? <ShopDashboard shop={myShop} /> : <RegisterShopForm />}
     </main>
   );

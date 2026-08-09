@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useAuth, useShop } from "../../../providers";
 import { CATEGORIES } from "@/lib/products";
-import { fileToDataUrl } from "@/lib/shops";
+import { uploadProductImage } from "@/lib/shops";
 
 const MAX_IMAGE_BYTES = 1.5 * 1024 * 1024;
 
@@ -20,6 +20,8 @@ export default function NewProductPage() {
   const [desc, setDesc] = useState("");
   const [images, setImages] = useState([]);
   const [imageUrl, setImageUrl] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
   if (!authHydrated) return null;
@@ -50,8 +52,20 @@ export default function NewProductPage() {
       return;
     }
     setError("");
-    const dataUrls = await Promise.all(files.map(fileToDataUrl));
-    setImages((prev) => [...prev, ...dataUrls]);
+    setUploading(true);
+    try {
+      // Upload tuần tự để giữ đúng thứ tự ảnh người dùng chọn
+      const urls = [];
+      for (const file of files) {
+        const url = await uploadProductImage(file, myShop.id);
+        urls.push(url);
+      }
+      setImages((prev) => [...prev, ...urls]);
+    } catch (err) {
+      setError(err.message || "Tải ảnh lên Supabase thất bại.");
+    } finally {
+      setUploading(false);
+    }
   }
 
   function handleAddImageUrl() {
@@ -64,7 +78,7 @@ export default function NewProductPage() {
     setImages((prev) => prev.filter((_, i) => i !== index));
   }
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
     if (name.trim().length < 3) {
       setError("Tên sản phẩm phải có ít nhất 3 ký tự.");
@@ -76,14 +90,20 @@ export default function NewProductPage() {
       return;
     }
     setError("");
-    const product = addProduct({
-      name: name.trim(),
-      category,
-      price: priceValue,
-      desc: desc.trim(),
-      images,
-    });
-    router.push(`/seller/products/${product.id}`);
+    setSubmitting(true);
+    try {
+      const product = await addProduct({
+        name: name.trim(),
+        category,
+        price: priceValue,
+        desc: desc.trim(),
+        images,
+      });
+      router.push(`/seller/products/${product.id}`);
+    } catch (err) {
+      setError(err.message || "Tạo sản phẩm thất bại, vui lòng thử lại.");
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -147,7 +167,7 @@ export default function NewProductPage() {
               <div className="flex flex-wrap gap-3 mb-3">
                 {images.map((img, i) => (
                   <div key={i} className="relative">
-                    {/* eslint-disable-next-line @next/next/no-img-element -- user-uploaded data URLs/arbitrary URLs */}
+                    {/* eslint-disable-next-line @next/next/no-img-element -- ảnh từ Supabase Storage/URL ngoài, không tối ưu bằng next/image */}
                     <img
                       src={img}
                       alt={`Ảnh ${i + 1}`}
@@ -170,8 +190,12 @@ export default function NewProductPage() {
               accept="image/*"
               multiple
               onChange={handleFiles}
+              disabled={uploading}
               className="text-sm mb-2"
             />
+            {uploading && (
+              <p className="text-xs text-gray-500 mb-2">Đang tải ảnh lên Supabase...</p>
+            )}
 
             <div className="flex gap-2">
               <input
@@ -194,9 +218,10 @@ export default function NewProductPage() {
 
           <button
             type="submit"
-            className="bg-gray-900 text-white py-2.5 rounded-md font-medium hover:bg-gray-800 transition-colors mt-2"
+            disabled={submitting || uploading}
+            className="bg-gray-900 text-white py-2.5 rounded-md font-medium hover:bg-gray-800 transition-colors mt-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Tạo sản phẩm
+            {submitting ? "Đang tạo..." : "Tạo sản phẩm"}
           </button>
         </form>
       </div>

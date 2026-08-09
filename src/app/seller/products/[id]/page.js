@@ -4,13 +4,14 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 import { useAuth, useShop } from "../../../providers";
-import { fileToDataUrl, getEffectivePrice } from "@/lib/shops";
+import { uploadProductImage, getEffectivePrice } from "@/lib/shops";
 
 const MAX_IMAGE_BYTES = 1.5 * 1024 * 1024;
 
 function ImagesSection({ product }) {
-  const { addImage, removeImage, replaceImage } = useShop();
+  const { myShop, addImage, removeImage, replaceImage } = useShop();
   const [error, setError] = useState("");
+  const [uploading, setUploading] = useState(false);
 
   async function handleAddFiles(e) {
     const files = Array.from(e.target.files || []);
@@ -21,9 +22,16 @@ function ImagesSection({ product }) {
       return;
     }
     setError("");
-    for (const file of files) {
-      const dataUrl = await fileToDataUrl(file);
-      addImage(product.id, dataUrl);
+    setUploading(true);
+    try {
+      for (const file of files) {
+        const url = await uploadProductImage(file, myShop.id);
+        await addImage(product.id, url);
+      }
+    } catch (err) {
+      setError(err.message || "Tải ảnh lên Supabase thất bại.");
+    } finally {
+      setUploading(false);
     }
   }
 
@@ -36,8 +44,24 @@ function ImagesSection({ product }) {
       return;
     }
     setError("");
-    const dataUrl = await fileToDataUrl(file);
-    replaceImage(product.id, index, dataUrl);
+    setUploading(true);
+    try {
+      const url = await uploadProductImage(file, myShop.id);
+      await replaceImage(product.id, index, url);
+    } catch (err) {
+      setError(err.message || "Tải ảnh lên Supabase thất bại.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function handleRemove(index) {
+    setError("");
+    try {
+      await removeImage(product.id, index);
+    } catch (err) {
+      setError(err.message || "Xoá ảnh thất bại.");
+    }
   }
 
   const images = product.images || [];
@@ -52,7 +76,7 @@ function ImagesSection({ product }) {
         <div className="flex flex-wrap gap-4 mb-4">
           {images.map((img, i) => (
             <div key={i} className="flex flex-col items-center gap-1.5">
-              {/* eslint-disable-next-line @next/next/no-img-element -- user-uploaded data URLs/arbitrary URLs */}
+              {/* eslint-disable-next-line @next/next/no-img-element -- ảnh từ Supabase Storage/URL ngoài */}
               <img
                 src={img}
                 alt={`Ảnh ${i + 1}`}
@@ -65,12 +89,14 @@ function ImagesSection({ product }) {
                     type="file"
                     accept="image/*"
                     className="hidden"
+                    disabled={uploading}
                     onChange={(e) => handleReplace(i, e)}
                   />
                 </label>
                 <button
-                  onClick={() => removeImage(product.id, i)}
-                  className="text-red-600 hover:text-red-700"
+                  onClick={() => handleRemove(i)}
+                  disabled={uploading}
+                  className="text-red-600 hover:text-red-700 disabled:opacity-50"
                 >
                   Xoá
                 </button>
@@ -81,7 +107,17 @@ function ImagesSection({ product }) {
       )}
 
       <label className="text-sm text-gray-700 block mb-1">Thêm ảnh mới</label>
-      <input type="file" accept="image/*" multiple onChange={handleAddFiles} className="text-sm" />
+      <input
+        type="file"
+        accept="image/*"
+        multiple
+        onChange={handleAddFiles}
+        disabled={uploading}
+        className="text-sm"
+      />
+      {uploading && (
+        <p className="text-xs text-gray-500 mt-2">Đang tải ảnh lên Supabase...</p>
+      )}
 
       {error && <p className="text-sm text-red-600 mt-2">{error}</p>}
     </section>
@@ -91,10 +127,32 @@ function ImagesSection({ product }) {
 function PriceSection({ product }) {
   const { setPrice, adjustPrice } = useShop();
   const [value, setValue] = useState(String(product.price));
+  const [error, setError] = useState("");
 
-  function handleSave(e) {
+  async function handleSave(e) {
     e.preventDefault();
-    setPrice(product.id, value);
+    setError("");
+    try {
+      await setPrice(product.id, value);
+    } catch (err) {
+      setError(err.message || "Cập nhật giá thất bại.");
+    }
+  }
+
+  async function handleAdjust(deltaPercent) {
+    setError("");
+    try {
+      await adjustPrice(product.id, deltaPercent);
+      setValue((v) =>
+        String(
+          deltaPercent < 0
+            ? Math.max(0, Math.round((Number(v) * 0.9) / 500) * 500)
+            : Math.round((Number(v) * 1.1) / 500) * 500
+        )
+      );
+    } catch (err) {
+      setError(err.message || "Điều chỉnh giá thất bại.");
+    }
   }
 
   return (
@@ -125,24 +183,20 @@ function PriceSection({ product }) {
 
       <div className="flex gap-2 flex-wrap">
         <button
-          onClick={() => {
-            adjustPrice(product.id, -10);
-            setValue((v) => String(Math.max(0, Math.round((Number(v) * 0.9) / 500) * 500)));
-          }}
+          onClick={() => handleAdjust(-10)}
           className="text-xs border border-gray-300 rounded-full px-3 py-1 hover:border-gray-900"
         >
           Điều chỉnh -10%
         </button>
         <button
-          onClick={() => {
-            adjustPrice(product.id, 10);
-            setValue((v) => String(Math.round((Number(v) * 1.1) / 500) * 500));
-          }}
+          onClick={() => handleAdjust(10)}
           className="text-xs border border-gray-300 rounded-full px-3 py-1 hover:border-gray-900"
         >
           Điều chỉnh +10%
         </button>
       </div>
+
+      {error && <p className="text-sm text-red-600 mt-2">{error}</p>}
     </section>
   );
 }
@@ -153,7 +207,7 @@ function PromotionSection({ product }) {
   const [label, setLabel] = useState(product.promotion?.label ?? "");
   const [error, setError] = useState("");
 
-  function handleCreate(e) {
+  async function handleCreate(e) {
     e.preventDefault();
     const p = Number(percent);
     if (!p || p <= 0 || p >= 100) {
@@ -161,7 +215,20 @@ function PromotionSection({ product }) {
       return;
     }
     setError("");
-    setPromotion(product.id, { percent: p, label: label.trim() || `Giảm ${p}%` });
+    try {
+      await setPromotion(product.id, { percent: p, label: label.trim() || `Giảm ${p}%` });
+    } catch (err) {
+      setError(err.message || "Tạo khuyến mãi thất bại.");
+    }
+  }
+
+  async function handleRemove() {
+    setError("");
+    try {
+      await removePromotion(product.id);
+    } catch (err) {
+      setError(err.message || "Huỷ khuyến mãi thất bại.");
+    }
   }
 
   return (
@@ -187,7 +254,7 @@ function PromotionSection({ product }) {
             </span>
           </p>
           <button
-            onClick={() => removePromotion(product.id)}
+            onClick={handleRemove}
             className="text-sm text-red-600 hover:text-red-700 border border-red-200 rounded-md px-3 py-1.5"
           >
             Huỷ khuyến mãi

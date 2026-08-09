@@ -2,7 +2,8 @@
 
 import { createContext, useContext, useEffect, useState } from "react";
 import { PRODUCTS } from "@/lib/products";
-import { genId, getEffectivePrice } from "@/lib/shops";
+import { getEffectivePrice } from "@/lib/shops";
+import { supabase } from "@/lib/supabaseClient";
 
 const CartContext = createContext(null);
 const AuthContext = createContext(null);
@@ -10,9 +11,9 @@ const ShopContext = createContext(null);
 
 const CART_KEY = "shopai_cart";
 const AUTH_KEY = "shopai_user";
-const SHOPS_KEY = "shopai_shops";
-const SELLER_PRODUCTS_KEY = "shopai_seller_products";
 
+// Đăng nhập ở đây vẫn chỉ là mô phỏng (nhập email, lưu localStorage), CHƯA
+// dùng Supabase Auth thật. Xem lưu ý bảo mật trong supabase/schema.sql.
 function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [hydrated, setHydrated] = useState(false);
@@ -46,152 +47,221 @@ function AuthProvider({ children }) {
   );
 }
 
+// --- Chuyển đổi giữa cột snake_case của Postgres và object camelCase mà
+// phần còn lại của app (ProductCard, seller pages...) đang dùng, để không
+// phải sửa lại toàn bộ UI đã có.
+function mapShop(row) {
+  return {
+    id: row.id,
+    ownerEmail: row.owner_email,
+    name: row.name,
+    description: row.description,
+    phone: row.phone,
+    createdAt: row.created_at,
+  };
+}
+
+function mapProduct(row) {
+  return {
+    id: row.id,
+    shopId: row.shop_id,
+    name: row.name,
+    category: row.category,
+    price: Number(row.price),
+    desc: row.description,
+    images: row.images || [],
+    promotion: row.promotion,
+    createdAt: row.created_at,
+  };
+}
+
 function ShopProvider({ children }) {
   const { user } = useAuth();
   const [shops, setShops] = useState([]);
   const [sellerProducts, setSellerProducts] = useState([]);
   const [hydrated, setHydrated] = useState(false);
+  const [loadError, setLoadError] = useState("");
 
+  // Tải toàn bộ shops + products (của mọi gian hàng) từ Supabase 1 lần khi
+  // app khởi động. Đây là bản demo đơn giản: mọi thay đổi (thêm/sửa/xoá)
+  // sẽ cập nhật lại state cục bộ ngay sau khi Supabase xác nhận thành công,
+  // KHÔNG dùng realtime subscription.
   useEffect(() => {
-    try {
-      const rawShops = localStorage.getItem(SHOPS_KEY);
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time hydration from localStorage on mount
-      if (rawShops) setShops(JSON.parse(rawShops));
-      const rawProducts = localStorage.getItem(SELLER_PRODUCTS_KEY);
-      if (rawProducts) setSellerProducts(JSON.parse(rawProducts));
-    } catch {
-      // ignore corrupted storage
+    let cancelled = false;
+
+    async function loadFromSupabase() {
+      try {
+        const [shopsRes, productsRes] = await Promise.all([
+          supabase.from("shops").select("*").order("created_at", { ascending: true }),
+          supabase.from("products").select("*").order("created_at", { ascending: true }),
+        ]);
+
+        if (shopsRes.error) throw shopsRes.error;
+        if (productsRes.error) throw productsRes.error;
+        if (cancelled) return;
+
+        setShops((shopsRes.data || []).map(mapShop));
+        setSellerProducts((productsRes.data || []).map(mapProduct));
+      } catch (err) {
+        if (!cancelled) {
+          console.error("[ShopProvider] Không tải được dữ liệu từ Supabase:", err);
+          setLoadError(
+            "Không tải được dữ liệu gian hàng từ Supabase. Kiểm tra lại NEXT_PUBLIC_SUPABASE_URL / " +
+              "NEXT_PUBLIC_SUPABASE_ANON_KEY trong .env.local, và đã chạy supabase/schema.sql chưa."
+          );
+        }
+      } finally {
+        if (!cancelled) setHydrated(true);
+      }
     }
-    setHydrated(true);
+
+    loadFromSupabase();
+    return () => {
+      cancelled = true;
+    };
   }, []);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    localStorage.setItem(SHOPS_KEY, JSON.stringify(shops));
-  }, [shops, hydrated]);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    localStorage.setItem(SELLER_PRODUCTS_KEY, JSON.stringify(sellerProducts));
-  }, [sellerProducts, hydrated]);
 
   const myShop = user ? shops.find((s) => s.ownerEmail === user.email) ?? null : null;
 
-  function registerShop({ name, description, phone }) {
+  async function registerShop({ name, description, phone }) {
     if (!user) throw new Error("Bạn cần đăng nhập trước.");
-    const shop = {
-      id: genId("shop"),
-      ownerEmail: user.email,
-      name,
-      description: description || "",
-      phone: phone || "",
-      createdAt: Date.now(),
-    };
+    const { data, error } = await supabase
+      .from("shops")
+      .insert({
+        owner_email: user.email,
+        name,
+        description: description || "",
+        phone: phone || "",
+      })
+      .select()
+      .single();
+    if (error) throw error;
+
+    const shop = mapShop(data);
     setShops((prev) => [...prev, shop]);
     return shop;
   }
 
-  function updateShop(patch) {
+  async function updateShop(patch) {
     if (!myShop) return;
-    setShops((prev) =>
-      prev.map((s) => (s.id === myShop.id ? { ...s, ...patch } : s))
-    );
+    const dbPatch = {};
+    if (patch.name !== undefined) dbPatch.name = patch.name;
+    if (patch.description !== undefined) dbPatch.description = patch.description;
+    if (patch.phone !== undefined) dbPatch.phone = patch.phone;
+
+    const { error } = await supabase.from("shops").update(dbPatch).eq("id", myShop.id);
+    if (error) throw error;
+
+    setShops((prev) => prev.map((s) => (s.id === myShop.id ? { ...s, ...patch } : s)));
   }
 
-  function addProduct({ name, category, price, desc, images = [] }) {
+  async function addProduct({ name, category, price, desc, images = [] }) {
     if (!myShop) throw new Error("Bạn cần đăng ký gian hàng trước.");
-    const product = {
-      id: genId("p"),
-      shopId: myShop.id,
-      name,
-      category,
-      price: Math.max(0, Math.round(Number(price) || 0)),
-      desc: desc || "",
-      images,
-      promotion: null,
-      createdAt: Date.now(),
-    };
+    const { data, error } = await supabase
+      .from("products")
+      .insert({
+        shop_id: myShop.id,
+        name,
+        category,
+        price: Math.max(0, Math.round(Number(price) || 0)),
+        description: desc || "",
+        images,
+        promotion: null,
+      })
+      .select()
+      .single();
+    if (error) throw error;
+
+    const product = mapProduct(data);
     setSellerProducts((prev) => [...prev, product]);
     return product;
   }
 
-  function removeProduct(productId) {
+  async function removeProduct(productId) {
+    if (!myShop) return;
+    const { error } = await supabase
+      .from("products")
+      .delete()
+      .eq("id", productId)
+      .eq("shop_id", myShop.id);
+    if (error) throw error;
+
+    setSellerProducts((prev) => prev.filter((p) => p.id !== productId));
+  }
+
+  async function updateProduct(productId, patch) {
+    const dbPatch = {};
+    if (patch.name !== undefined) dbPatch.name = patch.name;
+    if (patch.category !== undefined) dbPatch.category = patch.category;
+    if (patch.price !== undefined) dbPatch.price = patch.price;
+    if (patch.desc !== undefined) dbPatch.description = patch.desc;
+    if (patch.images !== undefined) dbPatch.images = patch.images;
+    if (patch.promotion !== undefined) dbPatch.promotion = patch.promotion;
+
+    const { error } = await supabase.from("products").update(dbPatch).eq("id", productId);
+    if (error) throw error;
+
     setSellerProducts((prev) =>
-      prev.filter((p) => !(p.id === productId && p.shopId === myShop?.id))
+      prev.map((p) => (p.id === productId ? { ...p, ...patch } : p))
     );
   }
 
-  function updateProduct(productId, patch) {
-    setSellerProducts((prev) =>
-      prev.map((p) =>
-        p.id === productId && p.shopId === myShop?.id ? { ...p, ...patch } : p
-      )
-    );
+  async function setPrice(productId, price) {
+    await updateProduct(productId, { price: Math.max(0, Math.round(Number(price) || 0)) });
   }
 
-  function setPrice(productId, price) {
-    updateProduct(productId, { price: Math.max(0, Math.round(Number(price) || 0)) });
-  }
-
-  function adjustPrice(productId, deltaPercent) {
+  async function adjustPrice(productId, deltaPercent) {
     const product = sellerProducts.find((p) => p.id === productId);
     if (!product) return;
     const next =
       Math.max(0, Math.round((product.price * (1 + deltaPercent / 100)) / 500)) * 500;
-    updateProduct(productId, { price: next });
+    await updateProduct(productId, { price: next });
   }
 
-  function addImage(productId, dataUrl) {
-    setSellerProducts((prev) =>
-      prev.map((p) =>
-        p.id === productId && p.shopId === myShop?.id
-          ? { ...p, images: [...(p.images || []), dataUrl] }
-          : p
-      )
-    );
+  // addImage/replaceImage nhận vào URL ảnh đã có sẵn (do trang gọi
+  // uploadProductImage() lên Supabase Storage trước, rồi mới gọi các hàm
+  // này để lưu URL đó vào cột `images` của sản phẩm).
+  async function addImage(productId, url) {
+    const product = sellerProducts.find((p) => p.id === productId);
+    if (!product) return;
+    const nextImages = [...(product.images || []), url];
+    await updateProduct(productId, { images: nextImages });
   }
 
-  function removeImage(productId, index) {
-    setSellerProducts((prev) =>
-      prev.map((p) =>
-        p.id === productId && p.shopId === myShop?.id
-          ? { ...p, images: (p.images || []).filter((_, i) => i !== index) }
-          : p
-      )
-    );
+  async function removeImage(productId, index) {
+    const product = sellerProducts.find((p) => p.id === productId);
+    if (!product) return;
+    const nextImages = (product.images || []).filter((_, i) => i !== index);
+    await updateProduct(productId, { images: nextImages });
   }
 
-  function replaceImage(productId, index, dataUrl) {
-    setSellerProducts((prev) =>
-      prev.map((p) =>
-        p.id === productId && p.shopId === myShop?.id
-          ? {
-              ...p,
-              images: (p.images || []).map((img, i) => (i === index ? dataUrl : img)),
-            }
-          : p
-      )
-    );
+  async function replaceImage(productId, index, url) {
+    const product = sellerProducts.find((p) => p.id === productId);
+    if (!product) return;
+    const nextImages = (product.images || []).map((img, i) => (i === index ? url : img));
+    await updateProduct(productId, { images: nextImages });
   }
 
-  function setPromotion(productId, promotion) {
-    updateProduct(productId, { promotion });
+  async function setPromotion(productId, promotion) {
+    await updateProduct(productId, { promotion });
   }
 
-  function removePromotion(productId) {
-    updateProduct(productId, { promotion: null });
+  async function removePromotion(productId) {
+    await updateProduct(productId, { promotion: null });
   }
 
   const myShopProducts = myShop
     ? sellerProducts.filter((p) => p.shopId === myShop.id)
     : [];
 
+  // Sản phẩm demo tĩnh (src/lib/products.js) + sản phẩm thật từ Supabase
   const allProducts = [...PRODUCTS, ...sellerProducts];
 
   return (
     <ShopContext.Provider
       value={{
         hydrated,
+        loadError,
         myShop,
         myShopProducts,
         allProducts,
@@ -199,6 +269,7 @@ function ShopProvider({ children }) {
         updateShop,
         addProduct,
         removeProduct,
+        updateProduct,
         setPrice,
         adjustPrice,
         addImage,
