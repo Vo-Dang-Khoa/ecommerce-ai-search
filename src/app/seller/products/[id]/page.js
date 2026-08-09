@@ -232,7 +232,7 @@ function PromotionSection({ product }) {
   }
 
   return (
-    <section className="border border-gray-200 rounded-xl p-6">
+    <section className="border border-gray-200 rounded-xl p-6 mb-6">
       <h2 className="text-lg font-bold text-gray-900 mb-4">Khuyến mãi</h2>
 
       {product.promotion ? (
@@ -296,6 +296,103 @@ function PromotionSection({ product }) {
   );
 }
 
+function AttributesSection({ product }) {
+  const { setAttributes } = useShop();
+  const attributes = product.attributes || [];
+  const [key, setKey] = useState("");
+  const [value, setValue] = useState("");
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function handleAdd(e) {
+    e.preventDefault();
+    const trimmedKey = key.trim();
+    const trimmedValue = value.trim();
+    if (!trimmedKey || !trimmedValue) {
+      setError("Vui lòng nhập cả tên và giá trị thuộc tính.");
+      return;
+    }
+    setError("");
+    setSaving(true);
+    try {
+      const next = [...attributes, { key: trimmedKey, value: trimmedValue }];
+      await setAttributes(product.id, next);
+      setKey("");
+      setValue("");
+    } catch (err) {
+      setError(err.message || "Thêm thuộc tính thất bại.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleRemove(index) {
+    setError("");
+    try {
+      const next = attributes.filter((_, i) => i !== index);
+      await setAttributes(product.id, next);
+    } catch (err) {
+      setError(err.message || "Xoá thuộc tính thất bại.");
+    }
+  }
+
+  return (
+    <section className="border border-gray-200 rounded-xl p-6 mb-6">
+      <h2 className="text-lg font-bold text-gray-900 mb-4">Thuộc tính sản phẩm</h2>
+      <p className="text-sm text-gray-500 mb-4">
+        Ví dụ: Trọng lượng, Xuất xứ, Thành phần, Hạn sử dụng, Kích thước...
+      </p>
+
+      {attributes.length === 0 ? (
+        <p className="text-sm text-gray-500 mb-4">Chưa có thuộc tính nào.</p>
+      ) : (
+        <div className="flex flex-col gap-2 mb-4">
+          {attributes.map((attr, i) => (
+            <div
+              key={i}
+              className="flex items-center justify-between gap-3 border border-gray-100 bg-gray-50 rounded-md px-3 py-2"
+            >
+              <p className="text-sm text-gray-700 min-w-0 truncate">
+                <span className="font-medium text-gray-900">{attr.key}:</span> {attr.value}
+              </p>
+              <button
+                onClick={() => handleRemove(i)}
+                className="text-xs text-red-600 hover:text-red-700 shrink-0"
+              >
+                Xoá
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <form onSubmit={handleAdd} className="flex flex-col sm:flex-row gap-2">
+        <input
+          value={key}
+          onChange={(e) => setKey(e.target.value)}
+          placeholder="Tên thuộc tính (VD: Trọng lượng)"
+          className="flex-1 border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-gray-900"
+        />
+        <input
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder="Giá trị (VD: 500g)"
+          className="flex-1 border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-gray-900"
+        />
+        <button
+          type="submit"
+          disabled={saving}
+          className="shrink-0 text-sm bg-gray-900 text-white px-4 py-2 rounded-md hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {saving ? "Đang lưu..." : "Thêm thuộc tính"}
+        </button>
+      </form>
+
+      {error && <p className="text-sm text-red-600 mt-2">{error}</p>}
+    </section>
+  );
+}
+
 export default function EditProductPage() {
   const { id } = useParams();
   const { user, hydrated: authHydrated } = useAuth();
@@ -353,6 +450,7 @@ export default function EditProductPage() {
         <ImagesSection product={product} />
         <PriceSection product={product} />
         <PromotionSection product={product} />
+        <AttributesSection product={product} />
       </div>
     </main>
   );

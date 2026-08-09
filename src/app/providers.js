@@ -171,6 +171,8 @@ function mapProduct(row) {
     desc: row.description,
     images: row.images || [],
     promotion: row.promotion,
+    // Thuộc tính sản phẩm (VD: Trọng lượng, Xuất xứ...), mảng { key, value }.
+    attributes: row.attributes || [],
     createdAt: row.created_at,
   };
 }
@@ -303,6 +305,7 @@ function ShopProvider({ children }) {
     if (patch.desc !== undefined) dbPatch.description = patch.desc;
     if (patch.images !== undefined) dbPatch.images = patch.images;
     if (patch.promotion !== undefined) dbPatch.promotion = patch.promotion;
+    if (patch.attributes !== undefined) dbPatch.attributes = patch.attributes;
 
     const { error } = await supabase.from("products").update(dbPatch).eq("id", productId);
     if (error) throw error;
@@ -356,6 +359,12 @@ function ShopProvider({ children }) {
     await updateProduct(productId, { promotion: null });
   }
 
+  // Thuộc tính sản phẩm (VD: Trọng lượng: 500g, Xuất xứ: Việt Nam...), nhập
+  // ở trang chỉnh sửa sản phẩm. attributes: mảng { key, value }.
+  async function setAttributes(productId, attributes) {
+    await updateProduct(productId, { attributes });
+  }
+
   const myShopProducts = myShop
     ? sellerProducts.filter((p) => p.shopId === myShop.id)
     : [];
@@ -383,6 +392,7 @@ function ShopProvider({ children }) {
         replaceImage,
         setPromotion,
         removePromotion,
+        setAttributes,
       }}
     >
       {children}
@@ -421,9 +431,17 @@ function mapOrder(row, itemRows) {
 // sử đơn hàng riêng — orders được lọc theo buyer_id = tài khoản hiện tại.
 function OrdersProvider({ children }) {
   const { user } = useAuth();
+  // myShop?.id (chuỗi ổn định) dùng làm dependency của effect tải đơn hàng
+  // người bán bên dưới — KHÔNG dùng myShopProducts vì mảng đó được tính lại
+  // (filter) ở mỗi lần render, sẽ khiến effect chạy lặp lại không cần thiết.
+  const { myShop } = useShop();
   const [orders, setOrders] = useState([]);
   const [hydrated, setHydrated] = useState(false);
   const [loadError, setLoadError] = useState("");
+
+  const [sellerOrders, setSellerOrders] = useState([]);
+  const [sellerOrdersHydrated, setSellerOrdersHydrated] = useState(false);
+  const [sellerOrdersError, setSellerOrdersError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -483,6 +501,85 @@ function OrdersProvider({ children }) {
       cancelled = true;
     };
   }, [user]);
+
+  // Đơn hàng có chứa sản phẩm của gian hàng mình — Người bán xem ở trang
+  // /seller, mục "Đơn đang đặt" / "Đơn đã giao" / "Đơn đã huỷ". Truy vấn 3
+  // bước: sản phẩm của gian hàng mình -> order_items chứa các sản phẩm đó
+  // -> orders tương ứng. Mỗi đơn chỉ hiển thị các mục hàng thuộc gian hàng
+  // mình (order có thể có thêm sản phẩm của gian hàng khác).
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSellerOrders() {
+      if (!myShop?.id) {
+        setSellerOrders([]);
+        setSellerOrdersError("");
+        setSellerOrdersHydrated(true);
+        return;
+      }
+      try {
+        const { data: productRows, error: productsErr } = await supabase
+          .from("products")
+          .select("id")
+          .eq("shop_id", myShop.id);
+        if (productsErr) throw productsErr;
+
+        const productIds = (productRows || []).map((p) => String(p.id));
+        if (productIds.length === 0) {
+          if (!cancelled) {
+            setSellerOrders([]);
+            setSellerOrdersError("");
+          }
+          return;
+        }
+
+        const { data: itemRows, error: itemsErr } = await supabase
+          .from("order_items")
+          .select("*")
+          .in("product_id", productIds);
+        if (itemsErr) throw itemsErr;
+
+        const orderIds = [...new Set((itemRows || []).map((it) => it.order_id))];
+        let orderRows = [];
+        if (orderIds.length > 0) {
+          const { data, error: ordersErr } = await supabase
+            .from("orders")
+            .select("*")
+            .in("id", orderIds)
+            .order("created_at", { ascending: false });
+          if (ordersErr) throw ordersErr;
+          orderRows = data || [];
+        }
+        if (cancelled) return;
+
+        setSellerOrders(
+          orderRows.map((row) =>
+            mapOrder(
+              row,
+              (itemRows || []).filter((it) => it.order_id === row.id)
+            )
+          )
+        );
+        setSellerOrdersError("");
+      } catch (err) {
+        if (!cancelled) {
+          console.error("[OrdersProvider] Không tải được đơn hàng của gian hàng:", err);
+          setSellerOrdersError(
+            "Không tải được đơn hàng của gian hàng từ Supabase. Có thể project chưa chạy " +
+              "supabase/schema.sql (bản mới nhất) để tạo policy cho phép Người bán xem đơn hàng."
+          );
+        }
+      } finally {
+        if (!cancelled) setSellerOrdersHydrated(true);
+      }
+    }
+
+    setSellerOrdersHydrated(false);
+    loadSellerOrders();
+    return () => {
+      cancelled = true;
+    };
+  }, [myShop?.id]);
 
   // items: mảng { product, qty } lấy từ useCart().items ngay trước khi
   // clearCart() ở trang /checkout.
@@ -566,7 +663,17 @@ function OrdersProvider({ children }) {
 
   return (
     <OrdersContext.Provider
-      value={{ orders, hydrated, loadError, placeOrder, cancelOrder, completeOrder }}
+      value={{
+        orders,
+        hydrated,
+        loadError,
+        placeOrder,
+        cancelOrder,
+        completeOrder,
+        sellerOrders,
+        sellerOrdersHydrated,
+        sellerOrdersError,
+      }}
     >
       {children}
     </OrdersContext.Provider>

@@ -1,9 +1,22 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { useAuth, useShop } from "../providers";
+import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { useAuth, useShop, useOrders } from "../providers";
 import { getEffectivePrice, getProductImage } from "@/lib/shops";
+import { paymentMethodLabel, shippingMethodLabel } from "@/lib/orderOptions";
+
+// "Người bán" trong header dẫn tới đây — mục "Tài khoản người bán" là gian
+// hàng/sản phẩm (nội dung cũ của trang), 3 mục còn lại là đơn hàng có chứa
+// sản phẩm của gian hàng mình, xem ở dạng chỉ đọc (Người bán không tự đổi
+// trạng thái đơn — việc đó do Người mua thực hiện ở trang /account).
+const SELLER_TABS = [
+  { key: "shop", label: "Tài khoản người bán" },
+  { key: "processing", label: "Đơn đang đặt" },
+  { key: "completed", label: "Đơn đã giao" },
+  { key: "cancelled", label: "Đơn đã huỷ" },
+];
 
 function RegisterShopForm() {
   const { registerShop } = useShop();
@@ -236,20 +249,13 @@ function ProductRow({ product }) {
   );
 }
 
-function ShopDashboard({ shop }) {
+// Nội dung tab "Tài khoản người bán": thông tin gian hàng + danh sách sản
+// phẩm (đăng bán, sửa giá, khuyến mãi, thuộc tính ở trang chi tiết sản phẩm).
+function ShopContent({ shop }) {
   const { myShopProducts } = useShop();
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-12">
-      <div className="flex items-center justify-between mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Kênh người bán</h1>
-        <Link
-          href="/account"
-          className="text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-md px-3 py-1.5"
-        >
-          Tài khoản của tôi
-        </Link>
-      </div>
+    <>
       <ShopInfoCard shop={shop} />
 
       <div className="flex items-center justify-between mb-4">
@@ -275,13 +281,115 @@ function ShopDashboard({ shop }) {
           ))}
         </div>
       )}
+    </>
+  );
+}
+
+// Đơn hàng chỉ đọc, dành cho Người bán — chỉ hiện các mục hàng thuộc gian
+// hàng của mình (order.items đã được lọc sẵn từ OrdersProvider), và tổng
+// tiền tính riêng cho phần sản phẩm của gian hàng mình (đơn có thể còn
+// chứa sản phẩm của gian hàng khác).
+function SellerOrderCard({ order }) {
+  const createdLabel = order.createdAt
+    ? new Date(order.createdAt).toLocaleString("vi-VN")
+    : "";
+  const shopSubtotal = order.items.reduce((sum, it) => sum + it.unitPrice * it.qty, 0);
+
+  return (
+    <div className="bg-white rounded-2xl border border-amber-100 shadow-sm p-5">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <p className="text-xs text-gray-500">
+          Mã đơn: <span className="font-mono">{order.id.slice(0, 8)}</span>
+          {createdLabel && <> · {createdLabel}</>}
+        </p>
+        <span className="text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-full px-2.5 py-1">
+          {paymentMethodLabel(order.paymentMethod)} · {shippingMethodLabel(order.shippingMethod)}
+        </span>
+      </div>
+
+      <div className="flex flex-col gap-2 mb-3">
+        {order.items.map((item) => (
+          <div key={item.id} className="flex items-center gap-3">
+            {item.image ? (
+              // eslint-disable-next-line @next/next/no-img-element -- ảnh snapshot lúc đặt hàng
+              <img
+                src={item.image}
+                alt={item.name}
+                className="w-10 h-10 object-cover rounded-md bg-amber-50 shrink-0"
+              />
+            ) : (
+              <span className="text-2xl shrink-0">🧁</span>
+            )}
+            <div className="flex-1 min-w-0">
+              <p className="text-sm text-gray-900 truncate">{item.name}</p>
+              <p className="text-xs text-gray-500">
+                {item.qty} x {item.unitPrice.toLocaleString("vi-VN")}đ
+              </p>
+            </div>
+            <span className="text-sm font-medium text-gray-900 shrink-0">
+              {(item.unitPrice * item.qty).toLocaleString("vi-VN")}đ
+            </span>
+          </div>
+        ))}
+      </div>
+
+      <div className="border-t border-gray-100 pt-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-sm">
+        <p className="text-gray-500">
+          Giao tới: {order.address || "—"} · SĐT: {order.phone || "—"}
+        </p>
+        <p className="font-semibold text-gray-900">
+          Tổng (sản phẩm của gian hàng bạn): {shopSubtotal.toLocaleString("vi-VN")}đ
+        </p>
+      </div>
     </div>
   );
 }
 
-export default function SellerPage() {
+function SellerOrdersTab({ status }) {
+  const { sellerOrders, sellerOrdersHydrated, sellerOrdersError } = useOrders();
+
+  if (!sellerOrdersHydrated) return null;
+
+  if (sellerOrdersError) {
+    return (
+      <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-md px-4 py-3">
+        {sellerOrdersError}
+      </p>
+    );
+  }
+
+  const filtered = sellerOrders.filter((o) => o.status === status);
+
+  if (filtered.length === 0) {
+    const emptyText =
+      status === "processing"
+        ? "Chưa có đơn hàng nào đang đặt."
+        : status === "completed"
+        ? "Chưa có đơn hàng nào đã giao."
+        : "Chưa có đơn hàng nào bị huỷ.";
+    return (
+      <p className="text-gray-500 py-8 text-center border border-dashed border-gray-300 rounded-xl bg-white">
+        {emptyText}
+      </p>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      {filtered.map((order) => (
+        <SellerOrderCard key={order.id} order={order} />
+      ))}
+    </div>
+  );
+}
+
+function SellerPageInner() {
+  const searchParams = useSearchParams();
   const { user, hydrated: authHydrated } = useAuth();
   const { myShop, hydrated: shopHydrated, loadError } = useShop();
+
+  const rawTab = searchParams.get("tab");
+  const tab = SELLER_TABS.some((t) => t.key === rawTab) ? rawTab : "shop";
 
   if (!authHydrated || !shopHydrated) return null;
 
@@ -323,16 +431,67 @@ export default function SellerPage() {
     );
   }
 
+  if (!myShop) {
+    return (
+      <main className="flex-1 bg-amber-50">
+        {loadError && (
+          <div className="max-w-md mx-auto px-4 pt-6">
+            <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-md px-4 py-3">
+              {loadError}
+            </p>
+          </div>
+        )}
+        <RegisterShopForm />
+      </main>
+    );
+  }
+
   return (
     <main className="flex-1 bg-amber-50">
-      {loadError && (
-        <div className="max-w-4xl mx-auto px-4 pt-6">
-          <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-md px-4 py-3">
+      <div className="max-w-4xl mx-auto px-4 py-12">
+        <div className="flex items-center justify-between mb-1">
+          <h1 className="text-3xl font-bold text-gray-900">Kênh người bán</h1>
+          <Link
+            href="/account"
+            className="text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-md px-3 py-1.5"
+          >
+            Tài khoản của tôi
+          </Link>
+        </div>
+        <p className="text-sm text-gray-500 mb-6">Gian hàng: {myShop.name}</p>
+
+        {loadError && (
+          <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-md px-4 py-3 mb-6">
             {loadError}
           </p>
+        )}
+
+        <div className="flex flex-wrap gap-2 mb-8">
+          {SELLER_TABS.map((t) => (
+            <Link
+              key={t.key}
+              href={`/seller?tab=${t.key}`}
+              className={`text-sm px-3 py-1.5 rounded-full border transition-colors ${
+                tab === t.key
+                  ? "bg-gray-900 text-white border-gray-900"
+                  : "border-gray-300 text-gray-700 hover:border-gray-900"
+              }`}
+            >
+              {t.label}
+            </Link>
+          ))}
         </div>
-      )}
-      {myShop ? <ShopDashboard shop={myShop} /> : <RegisterShopForm />}
+
+        {tab === "shop" ? <ShopContent shop={myShop} /> : <SellerOrdersTab status={tab} />}
+      </div>
     </main>
+  );
+}
+
+export default function SellerPage() {
+  return (
+    <Suspense fallback={<main className="flex-1 bg-amber-50" />}>
+      <SellerPageInner />
+    </Suspense>
   );
 }

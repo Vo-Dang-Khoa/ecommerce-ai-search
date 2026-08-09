@@ -1,11 +1,15 @@
--- ShopAI (ecommerce-ai-search) — Supabase schema (v4: thêm Supabase Auth thật
--- + phân vai trò Người mua / Người bán, thay cho cơ chế đăng nhập giả lập;
--- + thêm số điện thoại/địa chỉ giao hàng của khách cho trang /checkout;
--- + thêm bảng orders/order_items để lưu đơn hàng thật, hiển thị ở trang
---   /account với 3 mục: Đơn đang xử lý / Đơn đã mua / Đơn đã huỷ).
+-- ShopAI (ecommerce-ai-search) — Supabase schema (v5: thêm cột `attributes`
+-- (thuộc tính sản phẩm, VD: Trọng lượng, Xuất xứ...) cho bảng products;
+-- + thêm policy cho phép Người bán xem các đơn hàng/mục đơn hàng có chứa
+--   sản phẩm của gian hàng mình, hiển thị ở trang /seller với 3 mục: Đơn
+--   đang đặt / Đơn đã giao / Đơn đã huỷ).
 --
--- File này AN TOÀN để chạy lại (idempotent). Nếu bạn đã chạy bản v1/v2/v3
--- trước đó, chỉ cần chạy lại TOÀN BỘ file v4 này thêm 1 lần — nó tự thêm
+-- Lịch sử: v4 thêm Supabase Auth thật + phân vai trò Người mua / Người bán;
+-- + số điện thoại/địa chỉ giao hàng của khách cho trang /checkout; + bảng
+-- orders/order_items để lưu đơn hàng thật, hiển thị ở trang /account.
+--
+-- File này AN TOÀN để chạy lại (idempotent). Nếu bạn đã chạy bản v1/v2/v3/v4
+-- trước đó, chỉ cần chạy lại TOÀN BỘ file v5 này thêm 1 lần — nó tự thêm
 -- bảng/cột/policy mới, không xoá dữ liệu tài khoản/gian hàng/sản phẩm đã có.
 --
 -- Cách chạy: Supabase Dashboard > project của bạn > SQL Editor > New query
@@ -107,6 +111,12 @@ create table if not exists products (
 );
 
 create index if not exists products_shop_id_idx on products (shop_id);
+
+-- v5: thuộc tính sản phẩm (VD: Trọng lượng: 500g, Xuất xứ: Việt Nam...),
+-- nhập ở trang chỉnh sửa sản phẩm (/seller/products/[id]). Lưu dạng mảng
+-- JSON các cặp { key, value } để linh hoạt, không cần đổi schema mỗi khi
+-- thêm loại thuộc tính mới.
+alter table products add column if not exists attributes jsonb not null default '[]';
 
 -- ============================================================
 -- 4. Row Level Security — thay policy "công khai cho mọi thao tác ghi" ở
@@ -249,4 +259,33 @@ drop policy if exists "Buyers can insert own order items" on order_items;
 create policy "Buyers can insert own order items" on order_items
   for insert with check (
     order_id in (select id from orders where buyer_id = auth.uid())
+  );
+
+-- ============================================================
+-- 7. Người bán xem đơn hàng của gian hàng mình — trang /seller, mục
+--    "Đơn đang đặt" / "Đơn đã giao" / "Đơn đã huỷ". Đây là policy SELECT
+--    bổ sung (cộng thêm, không thay thế policy của Người mua ở trên) —
+--    Postgres RLS tự động nối các policy SELECT permissive trên cùng 1
+--    bảng bằng OR, nên Người mua vẫn xem được đơn của mình, còn Người bán
+--    xem được thêm các đơn có chứa sản phẩm của gian hàng mình.
+-- ============================================================
+drop policy if exists "Sellers can read orders containing their products" on orders;
+create policy "Sellers can read orders containing their products" on orders
+  for select using (
+    id in (
+      select order_id from order_items
+      where product_id in (
+        select id::text from products
+        where shop_id in (select id from shops where owner_id = auth.uid())
+      )
+    )
+  );
+
+drop policy if exists "Sellers can read own product order items" on order_items;
+create policy "Sellers can read own product order items" on order_items
+  for select using (
+    product_id in (
+      select id::text from products
+      where shop_id in (select id from shops where owner_id = auth.uid())
+    )
   );
