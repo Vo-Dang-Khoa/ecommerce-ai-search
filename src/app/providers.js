@@ -273,6 +273,30 @@ function AuthProvider({ children }) {
     if (error) throw error;
   }
 
+  // Quên mật khẩu (Người mua lẫn Người bán, dùng chung 1 form — xem
+  // QuickLoginForm.js): gửi email chứa link đặt lại mật khẩu tới địa chỉ đã
+  // đăng ký. Link trỏ về /reset-password?role=... (kèm sẵn vai trò đang
+  // đăng nhập để trang đó biết điều hướng đúng chỗ sau khi đổi xong).
+  // Supabase Auth luôn trả về thành công dù email có tồn tại hay không (để
+  // tránh lộ thông tin email nào đã đăng ký).
+  async function resetPasswordForEmail(email, role) {
+    const wantRole = role === "seller" ? "seller" : "buyer";
+    const redirectTo =
+      typeof window !== "undefined"
+        ? `${window.location.origin}/reset-password?role=${wantRole}`
+        : undefined;
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+    if (error) throw error;
+  }
+
+  // Đặt mật khẩu mới — gọi từ trang /reset-password, lúc đó Supabase Auth
+  // đã tự đăng nhập tạm (phiên "recovery") nhờ link trong email, nên chỉ
+  // cần updateUser({ password }) là đổi được, không cần biết mật khẩu cũ.
+  async function updatePassword(newPassword) {
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) throw error;
+  }
+
   const user = session?.user
     ? {
         id: session.user.id,
@@ -292,7 +316,17 @@ function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, signUp, signIn, logout, updateProfile, updateEmail, hydrated }}
+      value={{
+        user,
+        signUp,
+        signIn,
+        logout,
+        updateProfile,
+        updateEmail,
+        resetPasswordForEmail,
+        updatePassword,
+        hydrated,
+      }}
     >
       {children}
     </AuthContext.Provider>
