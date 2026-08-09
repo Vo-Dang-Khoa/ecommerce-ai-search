@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useAuth, useCart } from "../providers";
+import AuthDropdown from "./AuthDropdown";
 
 const SEARCH_MODES = [
   { href: "/search/image", icon: "📷", label: "Tìm kiếm bằng hình ảnh" },
@@ -31,13 +32,24 @@ export default function Header() {
           <Link href="/" className="text-xl font-bold text-gray-900">
             ShopAI
           </Link>
-          <nav className="hidden md:flex gap-6 text-sm text-gray-600">
+          <nav className="hidden md:flex items-center gap-6 text-sm text-gray-600">
             <Link href="/products" className="hover:text-gray-900">
               Sản phẩm
             </Link>
             <Link href="/loi-cam-on" className="hover:text-gray-900">
               Lời cảm ơn
             </Link>
+
+            {/* Người bán: đã đăng nhập với vai trò seller -> vào thẳng kênh
+                người bán. Chưa đăng nhập (hoặc đang là buyer) -> mở dropdown
+                đăng nhập/đăng ký dành cho người bán. */}
+            {user?.role === "seller" ? (
+              <Link href="/seller" className="hover:text-gray-900">
+                Người bán
+              </Link>
+            ) : (
+              <AuthDropdown triggerLabel="Người bán" registerRole="seller" />
+            )}
           </nav>
         </div>
 
@@ -77,12 +89,6 @@ export default function Header() {
         </form>
 
         <div className="flex items-center gap-4 text-sm text-gray-600 shrink-0">
-          {user?.role === "seller" && (
-            <Link href="/seller" className="hidden sm:inline hover:text-gray-900">
-              Kênh người bán
-            </Link>
-          )}
-
           {user ? (
             <div className="flex items-center gap-3">
               <span className="hidden sm:inline items-center gap-1.5 text-gray-700">
@@ -99,17 +105,9 @@ export default function Header() {
               </button>
             </div>
           ) : (
-            <div className="flex items-center gap-3">
-              <Link href="/login" className="hover:text-gray-900">
-                Đăng nhập
-              </Link>
-              <Link
-                href="/register"
-                className="text-sm bg-gray-900 text-white px-4 py-2 rounded-md hover:bg-gray-800"
-              >
-                Đăng ký
-              </Link>
-            </div>
+            /* Đăng nhập: dành cho người mua, mở dropdown có sẵn nút Đăng ký
+               bên trong cho người mua chưa có tài khoản. */
+            <AuthDropdown triggerLabel="Đăng nhập" registerRole="buyer" />
           )}
 
           <Link href="/cart" className="relative hover:text-gray-900">

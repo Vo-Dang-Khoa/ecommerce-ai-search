@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "../providers";
 
 function mapAuthError(err) {
@@ -19,14 +19,19 @@ function mapAuthError(err) {
   return msg || "Đăng ký thất bại, vui lòng thử lại.";
 }
 
-export default function RegisterPage() {
+function RegisterPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { signUp } = useAuth();
+
+  // Cho phép mở trang này kèm sẵn vai trò, vd: /register?role=seller
+  // (dùng bởi dropdown "Người bán" trong Header.js).
+  const initialRole = searchParams.get("role") === "seller" ? "seller" : "buyer";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [role, setRole] = useState("buyer");
+  const [role, setRole] = useState(initialRole);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [needsConfirmation, setNeedsConfirmation] = useState(false);
@@ -190,5 +195,13 @@ export default function RegisterPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={<main className="flex-1 bg-amber-50" />}>
+      <RegisterPageInner />
+    </Suspense>
   );
 }

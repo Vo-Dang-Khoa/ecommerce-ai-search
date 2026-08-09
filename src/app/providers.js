@@ -81,8 +81,17 @@ function AuthProvider({ children }) {
   }
 
   async function signIn({ email, password }) {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
+    // Trả về role ngay lập tức (thay vì chờ onAuthStateChange cập nhật state
+    // bất đồng bộ) để nơi gọi signIn() biết ngay nên điều hướng tới đâu
+    // (vd: /seller nếu là Người bán).
+    const { data: profileData } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", data.user.id)
+      .maybeSingle();
+    return { role: profileData?.role ?? "buyer" };
   }
 
   async function logout() {

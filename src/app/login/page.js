@@ -29,8 +29,8 @@ export default function LoginPage() {
     setError("");
     setSubmitting(true);
     try {
-      await signIn({ email, password });
-      router.push("/");
+      const { role } = await signIn({ email, password });
+      router.push(role === "seller" ? "/seller" : "/");
     } catch (err) {
       setError(mapAuthError(err));
     } finally {
