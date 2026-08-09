@@ -24,7 +24,12 @@ function mapAuthError(err) {
  * Sau khi đăng nhập thành công, nếu tài khoản có role "seller" sẽ tự điều
  * hướng sang /seller; ngược lại chỉ đóng dropdown lại (ở nguyên trang).
  */
-export default function AuthDropdown({ triggerLabel, registerRole }) {
+export default function AuthDropdown({
+  triggerLabel,
+  registerRole,
+  className = "relative",
+  triggerClassName = "hover:text-gray-900",
+}) {
   const router = useRouter();
   const { signIn } = useAuth();
   const containerRef = useRef(null);
@@ -72,8 +77,8 @@ export default function AuthDropdown({ triggerLabel, registerRole }) {
   }
 
   return (
-    <div className="relative" ref={containerRef}>
-      <button type="button" onClick={toggleOpen} className="hover:text-gray-900">
+    <div className={className} ref={containerRef}>
+      <button type="button" onClick={toggleOpen} className={triggerClassName}>
         {triggerLabel}
       </button>
 

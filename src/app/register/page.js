@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "../providers";
+import AuthDropdown from "../components/AuthDropdown";
 
 function mapAuthError(err) {
   const msg = err?.message || "";
@@ -147,12 +148,15 @@ function RegisterPageInner() {
             </button>
           </form>
 
-          <p className="text-sm text-gray-500 text-center mt-6">
-            Đã có tài khoản?{" "}
-            <Link href="/login" className="text-gray-900 font-medium hover:underline">
-              Đăng nhập
-            </Link>
-          </p>
+          <div className="text-sm text-gray-500 text-center mt-6 flex items-center justify-center gap-1.5">
+            <span>Đã có tài khoản?</span>
+            <AuthDropdown
+              triggerLabel="Đăng nhập"
+              registerRole={role}
+              className="relative inline-block"
+              triggerClassName="text-gray-900 font-medium hover:underline"
+            />
+          </div>
         </div>
       </div>
     </main>
