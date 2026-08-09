@@ -111,7 +111,7 @@ export default function Header() {
           )}
 
           <Link href="/cart" className="relative hover:text-gray-900">
-            Giỏ hàng người mua
+            Giỏ hàng
             {totalCount > 0 && (
               <span className="absolute -top-2 -right-3 bg-gray-900 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
                 {totalCount}
