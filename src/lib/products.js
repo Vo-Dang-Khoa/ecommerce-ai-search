@@ -147,6 +147,14 @@ export const PRODUCTS = [
     desc: "Giòn ngoài mềm trong, nhiều chocolate chip béo ngậy.",
   },
   {
+    id: "bq-3",
+    name: "Bánh quy Oreo",
+    category: "Bánh quy",
+    price: 48500,
+    emoji: "🍪",
+    desc: "Vỏ bánh quy bơ giòn tan hoà cùng vụn Oreo đen béo bùi, vị chocolate đậm đà khó cưỡng.",
+  },
+  {
     id: "tt-1",
     name: "Bánh Trung thu Đậu Xanh Trứng Muối",
     category: "Bánh Trung thu",
@@ -163,6 +171,14 @@ export const PRODUCTS = [
     desc: "Nhân hạt sen thanh mát kết hợp trà xanh, không quá ngọt.",
   },
   {
+    id: "tt-3",
+    name: "Bánh Trung thu thập cẩm",
+    category: "Bánh Trung thu",
+    price: 130000,
+    emoji: "🥮",
+    desc: "Nhân thập cẩm nhiều loại hạt, mứt bí, lạp xưởng hoà quyện, đậm đà hương vị Trung thu cổ truyền.",
+  },
+  {
     id: "sk-1",
     name: "Bánh su kem Nhân Kem Trứng",
     category: "Bánh su kem",
@@ -177,5 +193,13 @@ export const PRODUCTS = [
     price: 30000,
     emoji: "🍮",
     desc: "Nhân kem chocolate đậm vị, vỏ bánh giòn nhẹ.",
+  },
+  {
+    id: "sk-3",
+    name: "Bánh su kem nhân Phô mai",
+    category: "Bánh su kem",
+    price: 40000,
+    emoji: "🍮",
+    desc: "Vỏ bánh su nhẹ xốp, nhân phô mai kem béo mịn, vị mặn ngọt hài hoà tan ngay đầu lưỡi.",
   },
 ];
