@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth, useCart } from "../providers";
 import { getEffectivePrice, getProductImage } from "@/lib/shops";
+import { readContactCache, writeContactCache } from "@/lib/contactCache";
 
 const PAYMENT_METHODS = [
   {
@@ -41,11 +42,6 @@ const SHIPPING_METHODS = [
 
 const PHONE_REGEX = /^(0|\+84)[3-9][0-9]{8}$/;
 
-// Lưu tạm địa chỉ/SĐT vào trình duyệt để tự điền lại lần sau, kể cả khi
-// chưa lưu được vào Supabase (vd: chưa chạy schema.sql cập nhật cột
-// phone/address trong bảng profiles).
-const CONTACT_CACHE_KEY = "shopai_checkout_contact";
-
 export default function CheckoutPage() {
   const router = useRouter();
   const { user, hydrated: authHydrated, updateProfile } = useAuth();
@@ -72,13 +68,7 @@ export default function CheckoutPage() {
   // (vd: Supabase chưa lưu được) thì lấy từ cache trong trình duyệt.
   useEffect(() => {
     if (!user) return;
-    let cached = { phone: "", address: "" };
-    try {
-      const raw = localStorage.getItem(CONTACT_CACHE_KEY);
-      if (raw) cached = { ...cached, ...JSON.parse(raw) };
-    } catch {
-      // ignore corrupted cache
-    }
+    const cached = readContactCache();
     setAddress(user.address || cached.address || "");
     setPhone(user.phone || cached.phone || "");
   }, [user]);
@@ -106,11 +96,7 @@ export default function CheckoutPage() {
     // Luôn lưu tạm vào trình duyệt trước — không phụ thuộc Supabase, để
     // lần đặt hàng sau vẫn tự điền được kể cả khi bước lưu hồ sơ bên dưới
     // thất bại.
-    try {
-      localStorage.setItem(CONTACT_CACHE_KEY, JSON.stringify(contact));
-    } catch {
-      // ignore storage errors (vd: trình duyệt chặn localStorage)
-    }
+    writeContactCache(contact);
 
     // Lưu địa chỉ/SĐT vào hồ sơ Supabase chỉ là "tiện lợi thêm" cho lần
     // đặt hàng sau — KHÔNG được để lỗi ở bước này (vd: "Could not find the

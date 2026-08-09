@@ -113,12 +113,17 @@ export default function Header() {
         <div className="flex items-center gap-3 sm:gap-4 text-sm text-gray-600 shrink-0">
           {user ? (
             <div className="flex items-center gap-2 sm:gap-3">
-              <span className="hidden sm:inline-flex items-center gap-1.5 text-gray-700">
+              {/* Bấm vào email/vai trò -> trang /account để chỉnh sửa
+                  email, số điện thoại, địa chỉ liên lạc. */}
+              <Link
+                href="/account"
+                className="hidden sm:inline-flex items-center gap-1.5 text-gray-700 hover:text-gray-900"
+              >
                 {user.email}{" "}
                 <span className="text-xs text-amber-700 bg-amber-50 rounded-full px-2 py-0.5">
                   {user.role === "seller" ? "Người bán" : "Người mua"}
                 </span>
-              </span>
+              </Link>
               <button
                 onClick={logout}
                 className="text-sm bg-gray-900 text-white px-3 sm:px-4 py-2 rounded-md hover:bg-gray-800"
@@ -172,6 +177,15 @@ export default function Header() {
             >
               Người bán
             </Link>
+            {user && (
+              <Link
+                href="/account"
+                onClick={closeMenu}
+                className="px-2 py-2.5 rounded-md hover:bg-gray-50 text-gray-700"
+              >
+                Tài khoản của tôi ({user.email})
+              </Link>
+            )}
           </nav>
 
           <p className="text-xs font-medium text-gray-400 uppercase tracking-wide px-2 mb-1">

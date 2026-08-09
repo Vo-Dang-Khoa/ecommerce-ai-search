@@ -241,7 +241,15 @@ function ShopDashboard({ shop }) {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-12">
-      <h1 className="text-3xl font-bold text-gray-900 mb-8">Kênh người bán</h1>
+      <div className="flex items-center justify-between mb-8">
+        <h1 className="text-3xl font-bold text-gray-900">Kênh người bán</h1>
+        <Link
+          href="/account"
+          className="text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-md px-3 py-1.5"
+        >
+          Tài khoản của tôi
+        </Link>
+      </div>
       <ShopInfoCard shop={shop} />
 
       <div className="flex items-center justify-between mb-4">

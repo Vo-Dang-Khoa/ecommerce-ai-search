@@ -115,6 +115,17 @@ function AuthProvider({ children }) {
     setProfile((prev) => ({ ...prev, ...patch }));
   }
 
+  // Đổi email đăng nhập. Theo mặc định Supabase Auth yêu cầu xác nhận qua
+  // link gửi tới email mới (và cả email cũ, nếu bật "Secure email change")
+  // trước khi email thật sự đổi — nên session.user.email KHÔNG cập nhật
+  // ngay lập tức, trang /account cần tự hiển thị thông báo "kiểm tra email"
+  // thay vì coi như đã đổi xong.
+  async function updateEmail(newEmail) {
+    if (!session?.user) throw new Error("Bạn cần đăng nhập trước.");
+    const { error } = await supabase.auth.updateUser({ email: newEmail });
+    if (error) throw error;
+  }
+
   const user = session?.user
     ? {
         id: session.user.id,
@@ -127,7 +138,7 @@ function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, signUp, signIn, logout, updateProfile, hydrated }}
+      value={{ user, signUp, signIn, logout, updateProfile, updateEmail, hydrated }}
     >
       {children}
     </AuthContext.Provider>
