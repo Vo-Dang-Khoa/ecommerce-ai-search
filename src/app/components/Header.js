@@ -43,7 +43,7 @@ export default function Header() {
 
   // Người mua: bất kỳ tài khoản nào đã đăng nhập (buyer lẫn seller) đều có
   // thể đặt hàng, nên "Người mua" luôn dẫn tới /account — trang có 4 mục
-  // "Tài khoản người mua" / "Đơn đang xử lý" / "Đơn đã mua" / "Đơn đã huỷ".
+  // "Tài khoản người mua" / "Đơn đang xử lý" / "Đơn đã giao" / "Đơn đã huỷ".
   // Chưa đăng nhập -> điều hướng sang trang đăng nhập, xong quay lại /account.
   const buyerHref = user ? "/account" : "/login?role=buyer&redirect=/account";
 

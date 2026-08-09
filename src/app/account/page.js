@@ -15,7 +15,7 @@ const PHONE_REGEX = /^(0|\+84)[3-9][0-9]{8}$/;
 const TABS = [
   { key: "account", label: "Tài khoản người mua" },
   { key: "processing", label: "Đơn đang xử lý" },
-  { key: "completed", label: "Đơn đã mua" },
+  { key: "completed", label: "Đơn đã giao" },
   { key: "cancelled", label: "Đơn đã huỷ" },
 ];
 
@@ -337,7 +337,7 @@ function OrdersTab({ status }) {
       status === "processing"
         ? "Bạn chưa có đơn hàng nào đang xử lý."
         : status === "completed"
-        ? "Bạn chưa có đơn hàng nào đã mua."
+        ? "Bạn chưa có đơn hàng nào đã giao."
         : "Bạn chưa huỷ đơn hàng nào.";
     return (
       <p className="text-gray-500 py-8 text-center border border-dashed border-gray-300 rounded-xl bg-white">

@@ -549,9 +549,9 @@ function OrdersProvider({ children }) {
     );
   }
 
-  // Người mua tự xác nhận đã nhận được hàng -> chuyển đơn sang "đã mua".
+  // Người mua tự xác nhận đã nhận được hàng -> chuyển đơn sang "đã giao".
   // Bản demo không có luồng người bán xác nhận giao hàng, nên để người mua
-  // tự xác nhận là cách hợp lý nhất để mục "Đơn đã mua" có dữ liệu thật.
+  // tự xác nhận là cách hợp lý nhất để mục "Đơn đã giao" có dữ liệu thật.
   async function completeOrder(orderId) {
     const { error } = await supabase
       .from("orders")
