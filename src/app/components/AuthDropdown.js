@@ -80,7 +80,7 @@ export default function AuthDropdown({ triggerLabel, registerRole }) {
       {open && (
         <div className="absolute top-full mt-2 w-72 bg-white border border-gray-200 rounded-xl shadow-lg p-5 z-50 text-left">
           <p className="text-sm font-semibold text-gray-900 mb-3">
-            {registerRole === "seller" ? "Đăng nhập Người bán" : "Đăng nhập"}
+            {registerRole === "seller" ? "Người bán đăng nhập" : "Người mua đăng nhập"}
           </p>
           <form onSubmit={handleSubmit} className="flex flex-col gap-3">
             <input
