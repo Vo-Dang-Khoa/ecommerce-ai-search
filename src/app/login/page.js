@@ -42,7 +42,7 @@ function LoginPageInner() {
             Đăng nhập vào tài khoản {roleLabel} của bạn.
           </p>
 
-          <QuickLoginForm onSuccess={handleLoginSuccess} />
+          <QuickLoginForm onSuccess={handleLoginSuccess} role={role} />
 
           <p className="text-sm text-gray-500 text-center mt-6">
             Chưa có tài khoản?{" "}

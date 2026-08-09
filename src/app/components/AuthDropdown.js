@@ -58,7 +58,7 @@ export default function AuthDropdown({
             {registerRole === "seller" ? "Người bán đăng nhập" : "Người mua đăng nhập"}
           </p>
 
-          <QuickLoginForm onSuccess={handleLoginSuccess} />
+          <QuickLoginForm onSuccess={handleLoginSuccess} role={registerRole} />
 
           <div className="border-t border-gray-100 mt-4 pt-4 text-center">
             <p className="text-xs text-gray-500 mb-2">Chưa có tài khoản?</p>

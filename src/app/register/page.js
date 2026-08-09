@@ -8,9 +8,6 @@ import QuickLoginForm from "../components/QuickLoginForm";
 
 function mapAuthError(err) {
   const msg = err?.message || "";
-  if (msg.includes("User already registered")) {
-    return "Email này đã được đăng ký. Vui lòng đăng nhập.";
-  }
   if (msg.includes("Password should be at least")) {
     return "Mật khẩu phải có ít nhất 6 ký tự.";
   }
@@ -76,8 +73,14 @@ function RegisterPageInner() {
     setError("");
     setSubmitting(true);
     try {
-      const { needsEmailConfirmation } = await signUp({ email, password, role });
-      if (needsEmailConfirmation) {
+      const result = await signUp({ email, password, role });
+      if (result.cancelled) {
+        // Email đã có tài khoản ở vai trò còn lại và người dùng chọn Huỷ ở
+        // hộp thoại xác nhận đăng xuất bên kia — không điều hướng đi đâu cả.
+        setError(
+          `Đã huỷ. Vai trò ${roleLabel} chưa được đăng nhập vì tài khoản đang hoạt động ở vai trò còn lại.`
+        );
+      } else if (result.needsEmailConfirmation) {
         setNeedsConfirmation(true);
       } else {
         router.push(destinationFor(role));
@@ -130,7 +133,7 @@ function RegisterPageInner() {
                 Đăng nhập vào tài khoản {roleLabel} của bạn.
               </p>
 
-              <QuickLoginForm onSuccess={handleLoginSuccess} />
+              <QuickLoginForm onSuccess={handleLoginSuccess} role={role} />
 
               <p className="text-sm text-gray-500 text-center mt-6">
                 Chưa có tài khoản?{" "}

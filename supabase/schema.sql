@@ -1,15 +1,18 @@
--- ShopAI (ecommerce-ai-search) — Supabase schema (v5: thêm cột `attributes`
--- (thuộc tính sản phẩm, VD: Trọng lượng, Xuất xứ...) cho bảng products;
--- + thêm policy cho phép Người bán xem các đơn hàng/mục đơn hàng có chứa
---   sản phẩm của gian hàng mình, hiển thị ở trang /seller với 3 mục: Đơn
---   đang đặt / Đơn đã giao / Đơn đã huỷ).
+-- ShopAI (ecommerce-ai-search) — Supabase schema (v6: 1 email có thể vừa là
+-- tài khoản Người mua vừa là tài khoản Người bán — thêm cột `is_seller`
+-- (tài khoản đã từng đăng ký vai trò Người bán chưa) và `active_role` (đang
+-- đăng nhập ở vai trò nào — chỉ 1 trong 2 tại một thời điểm). Đăng ký vai
+-- trò mới bằng email đã tồn tại sẽ THÊM vai trò vào tài khoản cũ (nếu đúng
+-- mật khẩu) thay vì báo lỗi trùng email; đăng nhập vai trò khác trong khi
+-- vai trò còn lại đang hoạt động sẽ hỏi xác nhận đăng xuất bên kia.
 --
--- Lịch sử: v4 thêm Supabase Auth thật + phân vai trò Người mua / Người bán;
--- + số điện thoại/địa chỉ giao hàng của khách cho trang /checkout; + bảng
--- orders/order_items để lưu đơn hàng thật, hiển thị ở trang /account.
+-- Lịch sử: v5 thêm cột `attributes` (thuộc tính sản phẩm) cho bảng products
+-- + policy cho Người bán xem đơn hàng chứa sản phẩm của gian hàng mình; v4
+-- thêm Supabase Auth thật + phân vai trò Người mua/Người bán + số điện
+-- thoại/địa chỉ giao hàng + bảng orders/order_items.
 --
--- File này AN TOÀN để chạy lại (idempotent). Nếu bạn đã chạy bản v1/v2/v3/v4
--- trước đó, chỉ cần chạy lại TOÀN BỘ file v5 này thêm 1 lần — nó tự thêm
+-- File này AN TOÀN để chạy lại (idempotent). Nếu bạn đã chạy bản v1-v5 trước
+-- đó, chỉ cần chạy lại TOÀN BỘ file v6 này thêm 1 lần — nó tự thêm
 -- bảng/cột/policy mới, không xoá dữ liệu tài khoản/gian hàng/sản phẩm đã có.
 --
 -- Cách chạy: Supabase Dashboard > project của bạn > SQL Editor > New query
@@ -39,6 +42,20 @@ create table if not exists profiles (
 alter table profiles add column if not exists phone text not null default '';
 alter table profiles add column if not exists address text not null default '';
 
+-- v6: is_seller — tài khoản này đã từng đăng ký/được cấp vai trò Người bán
+-- chưa (khác với cột `role` chỉ ghi vai trò lúc đăng ký ĐẦU TIÊN). Một tài
+-- khoản (1 email) có thể vừa mua vừa bán: is_seller = true nghĩa là được
+-- phép đăng nhập vào /seller, còn Người mua thì tài khoản nào cũng làm được
+-- (không cần cột riêng).
+alter table profiles add column if not exists is_seller boolean not null default false;
+update profiles set is_seller = true where role = 'seller' and is_seller = false;
+
+-- v6: active_role — vai trò ĐANG đăng nhập hiện tại của tài khoản (chỉ 1
+-- trong 2: 'buyer' hoặc 'seller', hoặc null nếu đã đăng xuất khỏi cả 2).
+-- Dùng để chặn đăng nhập đồng thời cả 2 vai trò: khi đăng nhập vai trò khác
+-- với active_role hiện có, ứng dụng sẽ hỏi xác nhận trước khi ghi đè.
+alter table profiles add column if not exists active_role text check (active_role in ('buyer', 'seller'));
+
 alter table profiles enable row level security;
 
 drop policy if exists "Users can read own profile" on profiles;
@@ -60,11 +77,12 @@ language plpgsql
 security definer set search_path = public
 as $$
 begin
-  insert into public.profiles (id, email, role)
+  insert into public.profiles (id, email, role, is_seller)
   values (
     new.id,
     new.email,
-    coalesce(new.raw_user_meta_data ->> 'role', 'buyer')
+    coalesce(new.raw_user_meta_data ->> 'role', 'buyer'),
+    coalesce(new.raw_user_meta_data ->> 'role', 'buyer') = 'seller'
   )
   on conflict (id) do nothing;
   return new;

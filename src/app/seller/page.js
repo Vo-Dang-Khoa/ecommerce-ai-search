@@ -412,19 +412,24 @@ function SellerPageInner() {
   }
 
   if (user.role !== "seller") {
+    // isSeller: tài khoản (email) này đã từng đăng ký vai trò Người bán
+    // chưa — nếu rồi thì chỉ cần đăng nhập lại ở vai trò Người bán (cùng
+    // email/mật khẩu), không cần đăng ký tài khoản khác.
     return (
       <main className="flex-1 bg-amber-50">
         <div className="max-w-md mx-auto px-4 py-24 text-center">
           <p className="text-gray-600 mb-6">
-            Tài khoản của bạn đang ở vai trò <strong>Người mua</strong>, không thể truy cập
-            kênh người bán. Hãy đăng ký một tài khoản khác với vai trò Người bán nếu bạn
-            muốn mở gian hàng.
+            Tài khoản {user.email} đang đăng nhập ở vai trò <strong>Người mua</strong>, không
+            thể truy cập kênh người bán.{" "}
+            {user.isSeller
+              ? "Tài khoản này cũng có vai trò Người bán — hãy đăng nhập lại ở vai trò Người bán để tiếp tục."
+              : "Bạn có thể đăng ký thêm vai trò Người bán ngay trên email này, không cần tài khoản khác."}
           </p>
           <Link
-            href="/"
+            href={user.isSeller ? "/login?role=seller" : "/register?role=seller"}
             className="bg-gray-900 text-white px-5 py-2.5 rounded-md hover:bg-gray-800 transition-colors"
           >
-            Về trang chủ
+            {user.isSeller ? "Đăng nhập vai trò Người bán" : "Đăng ký vai trò Người bán"}
           </Link>
         </div>
       </main>
@@ -458,6 +463,12 @@ function SellerPageInner() {
             Tài khoản của tôi
           </Link>
         </div>
+        <p className="text-sm text-gray-500 mb-1">
+          Đăng nhập với email: <span className="text-gray-700">{user.email}</span>{" "}
+          <span className="text-xs text-amber-700 bg-amber-50 rounded-full px-2 py-0.5">
+            Người bán
+          </span>
+        </p>
         <p className="text-sm text-gray-500 mb-6">Gian hàng: {myShop.name}</p>
 
         {loadError && (

@@ -27,7 +27,7 @@ function AuthProvider({ children }) {
     async function loadProfile(userId) {
       const { data, error } = await supabase
         .from("profiles")
-        .select("role, email, phone, address")
+        .select("role, email, phone, address, is_seller, active_role")
         .eq("id", userId)
         .maybeSingle();
       if (cancelled) return;
@@ -66,36 +66,148 @@ function AuthProvider({ children }) {
     };
   }, []);
 
-  // role: "buyer" | "seller" — chọn lúc đăng ký, lưu vào auth metadata rồi
-  // trigger DB copy sang bảng profiles.
+  // Hỏi xác nhận trước khi ghi đè active_role của tài khoản (vd: đang đăng
+  // nhập Người mua, giờ đăng nhập Người bán) — trả về true nếu người dùng
+  // đồng ý đăng xuất vai trò còn lại để tiếp tục, false nếu huỷ.
+  function confirmRoleSwitch(currentActiveRole, wantRole) {
+    const otherLabel = currentActiveRole === "seller" ? "Người bán" : "Người mua";
+    const wantLabel = wantRole === "seller" ? "Người bán" : "Người mua";
+    if (typeof window === "undefined") return true;
+    return window.confirm(
+      `Tài khoản này đang đăng nhập ở vai trò ${otherLabel} (có thể ở tab/thiết bị khác). ` +
+        `Bạn có muốn đăng xuất vai trò ${otherLabel} để đăng nhập vai trò ${wantLabel} không?\n\n` +
+        `Chọn OK để tiếp tục đăng nhập ${wantLabel}, Huỷ để dừng lại.`
+    );
+  }
+
+  // role: "buyer" | "seller" — 1 email/tài khoản có thể có CẢ HAI vai trò
+  // (is_seller đánh dấu tài khoản đã được cấp vai trò Người bán chưa; vai
+  // trò Người mua thì tài khoản nào cũng có sẵn). Mỗi lần đăng nhập chỉ ở
+  // 1 trong 2 vai trò — lưu ở cột active_role, xem thêm confirmRoleSwitch().
   async function signUp({ email, password, role }) {
+    const wantRole = role === "seller" ? "seller" : "buyer";
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { role } },
+      options: { data: { role: wantRole } },
     });
-    if (error) throw error;
+
+    if (error) {
+      const alreadyRegistered =
+        error.message?.includes("already registered") ||
+        error.message?.includes("already been registered");
+      if (!alreadyRegistered) throw error;
+
+      // Email này đã có tài khoản (có thể đã đăng ký ở vai trò còn lại
+      // trước đó) — Supabase Auth không cho 2 tài khoản dùng chung 1 email,
+      // nên thay vì báo lỗi, ta xác thực bằng đúng mật khẩu vừa nhập; nếu
+      // khớp thì THÊM vai trò mới vào CHÍNH tài khoản đó.
+      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (signInError) {
+        throw new Error(
+          "Email này đã được dùng cho một tài khoản khác. Nếu đây là tài khoản của bạn, " +
+            "vui lòng nhập đúng mật khẩu tài khoản đó để thêm vai trò mới vào cùng tài khoản."
+        );
+      }
+
+      const userId = signInData.user.id;
+      const { data: existingProfile, error: profileErr } = await supabase
+        .from("profiles")
+        .select("is_seller, active_role")
+        .eq("id", userId)
+        .maybeSingle();
+      if (profileErr) throw profileErr;
+
+      if (wantRole === "seller" && !existingProfile?.is_seller) {
+        const { error: upgradeErr } = await supabase
+          .from("profiles")
+          .update({ is_seller: true })
+          .eq("id", userId);
+        if (upgradeErr) throw upgradeErr;
+      }
+
+      const currentActive = existingProfile?.active_role || null;
+      if (currentActive && currentActive !== wantRole) {
+        if (!confirmRoleSwitch(currentActive, wantRole)) {
+          await supabase.auth.signOut();
+          return { cancelled: true };
+        }
+      }
+
+      const { error: claimErr } = await supabase
+        .from("profiles")
+        .update({ active_role: wantRole })
+        .eq("id", userId);
+      if (claimErr) throw claimErr;
+
+      return { needsEmailConfirmation: false, linkedExisting: true };
+    }
+
     // Nếu project bật "Confirm email", data.session sẽ là null cho tới khi
     // người dùng bấm link xác nhận trong hộp thư — trang /register cần biết
-    // điều này để hiện thông báo phù hợp thay vì điều hướng ngay.
-    return { needsEmailConfirmation: !data.session };
+    // điều này để hiện thông báo phù hợp thay vì điều hướng ngay. Chưa có
+    // session thì cũng chưa có gì để đánh dấu active_role.
+    if (!data.session) {
+      return { needsEmailConfirmation: true };
+    }
+
+    await supabase.from("profiles").update({ active_role: wantRole }).eq("id", data.user.id);
+    return { needsEmailConfirmation: false };
   }
 
-  async function signIn({ email, password }) {
+  async function signIn({ email, password, role }) {
+    const wantRole = role === "seller" ? "seller" : "buyer";
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
+
+    const userId = data.user.id;
+    const { data: profileData, error: profileErr } = await supabase
+      .from("profiles")
+      .select("is_seller, active_role")
+      .eq("id", userId)
+      .maybeSingle();
+    if (profileErr) throw profileErr;
+
+    if (wantRole === "seller" && !profileData?.is_seller) {
+      await supabase.auth.signOut();
+      throw new Error(
+        "Tài khoản này chưa đăng ký vai trò Người bán. Vui lòng đăng ký vai trò Người bán trước."
+      );
+    }
+
+    const currentActive = profileData?.active_role || null;
+    if (currentActive && currentActive !== wantRole) {
+      if (!confirmRoleSwitch(currentActive, wantRole)) {
+        await supabase.auth.signOut();
+        throw new Error("Đã huỷ đăng nhập.");
+      }
+    }
+
+    const { error: claimErr } = await supabase
+      .from("profiles")
+      .update({ active_role: wantRole })
+      .eq("id", userId);
+    if (claimErr) throw claimErr;
+
     // Trả về role ngay lập tức (thay vì chờ onAuthStateChange cập nhật state
     // bất đồng bộ) để nơi gọi signIn() biết ngay nên điều hướng tới đâu
     // (vd: /seller nếu là Người bán).
-    const { data: profileData } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", data.user.id)
-      .maybeSingle();
-    return { role: profileData?.role ?? "buyer" };
+    return { role: wantRole };
   }
 
+  // Đăng xuất: giải phóng active_role để tài khoản có thể đăng nhập lại ở
+  // vai trò còn lại (từ tab/thiết bị khác) mà không bị hỏi xác nhận.
   async function logout() {
+    if (session?.user) {
+      try {
+        await supabase.from("profiles").update({ active_role: null }).eq("id", session.user.id);
+      } catch (err) {
+        console.warn("[AuthProvider] Không xoá được active_role lúc đăng xuất:", err);
+      }
+    }
     await supabase.auth.signOut();
   }
 
@@ -131,7 +243,14 @@ function AuthProvider({ children }) {
     ? {
         id: session.user.id,
         email: session.user.email,
-        role: profile?.role ?? "buyer",
+        // Vai trò ĐANG đăng nhập của phiên này — ưu tiên active_role (đặt
+        // lúc đăng nhập/đăng ký, xem signIn()/signUp() ở trên), fallback về
+        // role (vai trò đăng ký đầu tiên) cho các phiên cũ trước khi có
+        // active_role, cuối cùng mặc định "buyer".
+        role: profile?.active_role ?? profile?.role ?? "buyer",
+        // Tài khoản đã từng được cấp vai trò Người bán chưa (dùng để hiện
+        // gợi ý "đăng nhập bên Người bán" mà không cần đăng ký lại).
+        isSeller: !!profile?.is_seller,
         phone: profile?.phone ?? "",
         address: profile?.address ?? "",
       }

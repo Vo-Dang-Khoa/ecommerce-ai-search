@@ -17,11 +17,14 @@ function mapAuthError(err) {
 /**
  * Form đăng nhập (email + mật khẩu) dùng chung cho:
  *   - AuthDropdown.js (bảng nổi ở header)
- *   - register/page.js (bảng "... đăng nhập" thay thế bảng "... đăng ký")
+ *   - login/page.js, register/page.js (bảng "... đăng nhập")
+ * `role` ("buyer"/"seller"): vai trò muốn đăng nhập vào — 1 email có thể có
+ * cả 2 vai trò nhưng chỉ đăng nhập được 1 bên tại 1 thời điểm; nếu bên còn
+ * lại đang hoạt động, signIn() sẽ tự hỏi xác nhận trước khi ghi đè.
  * Không tự điều hướng — sau khi đăng nhập thành công sẽ gọi onSuccess(role)
  * để nơi gọi tự quyết định làm gì tiếp theo (đóng dropdown, chuyển trang...).
  */
-export default function QuickLoginForm({ onSuccess }) {
+export default function QuickLoginForm({ onSuccess, role }) {
   const { signIn } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -33,10 +36,10 @@ export default function QuickLoginForm({ onSuccess }) {
     setError("");
     setSubmitting(true);
     try {
-      const { role } = await signIn({ email, password });
+      const { role: loggedInRole } = await signIn({ email, password, role });
       setEmail("");
       setPassword("");
-      onSuccess?.(role);
+      onSuccess?.(loggedInRole);
     } catch (err) {
       setError(mapAuthError(err));
     } finally {
