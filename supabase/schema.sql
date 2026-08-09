@@ -1,18 +1,17 @@
--- ShopAI (ecommerce-ai-search) — Supabase schema (v6: 1 email có thể vừa là
--- tài khoản Người mua vừa là tài khoản Người bán — thêm cột `is_seller`
--- (tài khoản đã từng đăng ký vai trò Người bán chưa) và `active_role` (đang
--- đăng nhập ở vai trò nào — chỉ 1 trong 2 tại một thời điểm). Đăng ký vai
--- trò mới bằng email đã tồn tại sẽ THÊM vai trò vào tài khoản cũ (nếu đúng
--- mật khẩu) thay vì báo lỗi trùng email; đăng nhập vai trò khác trong khi
--- vai trò còn lại đang hoạt động sẽ hỏi xác nhận đăng xuất bên kia.
+-- ShopAI (ecommerce-ai-search) — Supabase schema (v7: thêm trạng thái đơn
+-- hàng "shipping" (Đơn đang giao) — Người bán bấm "Bắt đầu giao hàng" ở
+-- trang /seller (processing -> shipping), Người mua tự xác nhận "Đã nhận
+-- được hàng" ở trang /account khi đơn đang shipping (shipping -> completed).
+-- Đơn chỉ huỷ được lúc còn "processing" (Đơn chờ xử lý), trước khi giao.
 --
--- Lịch sử: v5 thêm cột `attributes` (thuộc tính sản phẩm) cho bảng products
--- + policy cho Người bán xem đơn hàng chứa sản phẩm của gian hàng mình; v4
--- thêm Supabase Auth thật + phân vai trò Người mua/Người bán + số điện
--- thoại/địa chỉ giao hàng + bảng orders/order_items.
+-- Lịch sử: v6 cho phép 1 email vừa là tài khoản Người mua vừa là Người bán
+-- (cột is_seller/active_role); v5 thêm cột attributes (thuộc tính sản
+-- phẩm) + policy Người bán xem đơn hàng chứa sản phẩm của mình; v4 thêm
+-- Supabase Auth thật + phân vai trò + số điện thoại/địa chỉ giao hàng +
+-- bảng orders/order_items.
 --
--- File này AN TOÀN để chạy lại (idempotent). Nếu bạn đã chạy bản v1-v5 trước
--- đó, chỉ cần chạy lại TOÀN BỘ file v6 này thêm 1 lần — nó tự thêm
+-- File này AN TOÀN để chạy lại (idempotent). Nếu bạn đã chạy bản v1-v6 trước
+-- đó, chỉ cần chạy lại TOÀN BỘ file v7 này thêm 1 lần — nó tự thêm
 -- bảng/cột/policy mới, không xoá dữ liệu tài khoản/gian hàng/sản phẩm đã có.
 --
 -- Cách chạy: Supabase Dashboard > project của bạn > SQL Editor > New query
@@ -305,5 +304,27 @@ create policy "Sellers can read own product order items" on order_items
     product_id in (
       select id::text from products
       where shop_id in (select id from shops where owner_id = auth.uid())
+    )
+  );
+
+-- ============================================================
+-- 8. Trạng thái đơn hàng "shipping" (Đơn đang giao) + cho phép Người bán
+--    tự chuyển đơn từ "processing" (chờ xử lý) sang "shipping" (đang giao)
+--    ở trang /seller. Ràng buộc check cũ chỉ cho 'processing'/'completed'/
+--    'cancelled' nên phải xoá và tạo lại để thêm 'shipping'.
+-- ============================================================
+alter table orders drop constraint if exists orders_status_check;
+alter table orders add constraint orders_status_check
+  check (status in ('processing', 'shipping', 'completed', 'cancelled'));
+
+drop policy if exists "Sellers can update orders containing their products" on orders;
+create policy "Sellers can update orders containing their products" on orders
+  for update using (
+    id in (
+      select order_id from order_items
+      where product_id in (
+        select id::text from products
+        where shop_id in (select id from shops where owner_id = auth.uid())
+      )
     )
   );

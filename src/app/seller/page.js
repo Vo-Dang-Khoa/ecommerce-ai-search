@@ -8,12 +8,16 @@ import { getEffectivePrice, getProductImage } from "@/lib/shops";
 import { paymentMethodLabel, shippingMethodLabel } from "@/lib/orderOptions";
 
 // "Người bán" trong header dẫn tới đây — mục "Tài khoản người bán" là gian
-// hàng/sản phẩm (nội dung cũ của trang), 3 mục còn lại là đơn hàng có chứa
-// sản phẩm của gian hàng mình, xem ở dạng chỉ đọc (Người bán không tự đổi
-// trạng thái đơn — việc đó do Người mua thực hiện ở trang /account).
+// hàng/sản phẩm (nội dung cũ của trang), 4 mục còn lại là đơn hàng có chứa
+// sản phẩm của gian hàng mình. Luồng trạng thái đơn: "Đơn chờ xử lý"
+// (processing, mới đặt) -> Người bán bấm "Bắt đầu giao hàng" -> "Đơn đang
+// giao" (shipping) -> Người mua tự xác nhận đã nhận hàng ở trang /account
+// -> "Đơn đã giao" (completed); hoặc Người mua huỷ trong lúc còn "chờ xử
+// lý" -> "Đơn đã huỷ" (cancelled).
 const SELLER_TABS = [
   { key: "shop", label: "Tài khoản người bán" },
-  { key: "processing", label: "Đơn đang đặt" },
+  { key: "processing", label: "Đơn chờ xử lý" },
+  { key: "shipping", label: "Đơn đang giao" },
   { key: "completed", label: "Đơn đã giao" },
   { key: "cancelled", label: "Đơn đã huỷ" },
 ];
@@ -285,15 +289,33 @@ function ShopContent({ shop }) {
   );
 }
 
-// Đơn hàng chỉ đọc, dành cho Người bán — chỉ hiện các mục hàng thuộc gian
-// hàng của mình (order.items đã được lọc sẵn từ OrdersProvider), và tổng
-// tiền tính riêng cho phần sản phẩm của gian hàng mình (đơn có thể còn
-// chứa sản phẩm của gian hàng khác).
+// Đơn hàng dành cho Người bán — chỉ hiện các mục hàng thuộc gian hàng của
+// mình (order.items đã được lọc sẵn từ OrdersProvider), và tổng tiền tính
+// riêng cho phần sản phẩm của gian hàng mình (đơn có thể còn chứa sản phẩm
+// của gian hàng khác). Khi đơn đang "chờ xử lý", Người bán bấm "Bắt đầu
+// giao hàng" để chuyển sang "đang giao" — các bước sau đó (xác nhận đã
+// nhận hàng / huỷ) do Người mua tự thực hiện ở trang /account.
 function SellerOrderCard({ order }) {
+  const { shipOrder } = useOrders();
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
   const createdLabel = order.createdAt
     ? new Date(order.createdAt).toLocaleString("vi-VN")
     : "";
   const shopSubtotal = order.items.reduce((sum, it) => sum + it.unitPrice * it.qty, 0);
+
+  async function handleShip() {
+    setError("");
+    setBusy(true);
+    try {
+      await shipOrder(order.id);
+    } catch (err) {
+      setError(err?.message || "Cập nhật thất bại, vui lòng thử lại.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <div className="bg-white rounded-2xl border border-amber-100 shadow-sm p-5">
@@ -341,6 +363,20 @@ function SellerOrderCard({ order }) {
           Tổng (sản phẩm của gian hàng bạn): {shopSubtotal.toLocaleString("vi-VN")}đ
         </p>
       </div>
+
+      {error && <p className="text-sm text-red-600 mt-2">{error}</p>}
+
+      {order.status === "processing" && (
+        <div className="flex gap-2 mt-4">
+          <button
+            onClick={handleShip}
+            disabled={busy}
+            className="text-sm bg-gray-900 text-white px-3 py-1.5 rounded-md hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Bắt đầu giao hàng
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -363,7 +399,9 @@ function SellerOrdersTab({ status }) {
   if (filtered.length === 0) {
     const emptyText =
       status === "processing"
-        ? "Chưa có đơn hàng nào đang đặt."
+        ? "Chưa có đơn hàng nào chờ xử lý."
+        : status === "shipping"
+        ? "Chưa có đơn hàng nào đang giao."
         : status === "completed"
         ? "Chưa có đơn hàng nào đã giao."
         : "Chưa có đơn hàng nào bị huỷ.";
@@ -412,9 +450,11 @@ function SellerPageInner() {
   }
 
   if (user.role !== "seller") {
-    // isSeller: tài khoản (email) này đã từng đăng ký vai trò Người bán
-    // chưa — nếu rồi thì chỉ cần đăng nhập lại ở vai trò Người bán (cùng
-    // email/mật khẩu), không cần đăng ký tài khoản khác.
+    // isSeller: tài khoản (email) này đã từng được cấp vai trò Người bán
+    // chưa (chỉ còn đúng với các tài khoản đã gộp vai trò TRƯỚC KHI tính
+    // năng đó bị bỏ) — nếu rồi thì chỉ cần đăng nhập lại ở vai trò Người
+    // bán. Mỗi email giờ chỉ đăng ký được 1 vai trò duy nhất, nên tài khoản
+    // Người mua bình thường phải dùng MỘT EMAIL KHÁC để đăng ký Người bán.
     return (
       <main className="flex-1 bg-amber-50">
         <div className="max-w-md mx-auto px-4 py-24 text-center">
@@ -423,7 +463,7 @@ function SellerPageInner() {
             thể truy cập kênh người bán.{" "}
             {user.isSeller
               ? "Tài khoản này cũng có vai trò Người bán — hãy đăng nhập lại ở vai trò Người bán để tiếp tục."
-              : "Bạn có thể đăng ký thêm vai trò Người bán ngay trên email này, không cần tài khoản khác."}
+              : "Hãy đăng ký một tài khoản khác (email khác) với vai trò Người bán nếu bạn muốn mở gian hàng."}
           </p>
           <Link
             href={user.isSeller ? "/login?role=seller" : "/register?role=seller"}

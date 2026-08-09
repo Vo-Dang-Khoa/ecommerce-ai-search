@@ -10,11 +10,16 @@ import { paymentMethodLabel, shippingMethodLabel } from "@/lib/orderOptions";
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_REGEX = /^(0|\+84)[3-9][0-9]{8}$/;
 
-// "Người mua" trong header dẫn tới đây — 4 mục giống nhau cho mọi tài
-// khoản đã đăng nhập (Người mua lẫn Người bán đều có thể đặt hàng).
+// Trang tài khoản Người mua — 5 mục giống nhau cho mọi tài khoản đã đăng
+// nhập (Người mua lẫn Người bán đều có thể đặt hàng). Luồng trạng thái đơn:
+// "Đơn đang xử lý" (processing, mới đặt) -> Người bán bấm "Bắt đầu giao
+// hàng" ở trang /seller -> "Đơn đang giao" (shipping) -> tự bấm "Đã nhận
+// được hàng" ở đây -> "Đơn đã giao" (completed); hoặc tự huỷ trong lúc còn
+// "đang xử lý" -> "Đơn đã huỷ" (cancelled).
 const TABS = [
   { key: "account", label: "Tài khoản người mua" },
   { key: "processing", label: "Đơn đang xử lý" },
+  { key: "shipping", label: "Đơn đang giao" },
   { key: "completed", label: "Đơn đã giao" },
   { key: "cancelled", label: "Đơn đã huỷ" },
 ];
@@ -295,22 +300,30 @@ function OrderCard({ order }) {
 
       {error && <p className="text-sm text-red-600 mt-2">{error}</p>}
 
-      {order.status === "processing" && (
+      {(order.status === "processing" || order.status === "shipping") && (
         <div className="flex gap-2 mt-4">
-          <button
-            onClick={handleComplete}
-            disabled={busy}
-            className="text-sm bg-gray-900 text-white px-3 py-1.5 rounded-md hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Đã nhận được hàng
-          </button>
-          <button
-            onClick={handleCancel}
-            disabled={busy}
-            className="text-sm text-red-600 hover:text-red-700 border border-red-200 rounded-md px-3 py-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Huỷ đơn
-          </button>
+          {/* Chỉ xác nhận "đã nhận hàng" được khi Người bán đã bắt đầu giao
+              (status === "shipping") — chưa giao thì chưa có gì để nhận. */}
+          {order.status === "shipping" && (
+            <button
+              onClick={handleComplete}
+              disabled={busy}
+              className="text-sm bg-gray-900 text-white px-3 py-1.5 rounded-md hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Đã nhận được hàng
+            </button>
+          )}
+          {/* Chỉ huỷ được khi đơn còn "chờ xử lý" — đã giao thì không huỷ
+              qua nút này nữa. */}
+          {order.status === "processing" && (
+            <button
+              onClick={handleCancel}
+              disabled={busy}
+              className="text-sm text-red-600 hover:text-red-700 border border-red-200 rounded-md px-3 py-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Huỷ đơn
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -336,6 +349,8 @@ function OrdersTab({ status }) {
     const emptyText =
       status === "processing"
         ? "Bạn chưa có đơn hàng nào đang xử lý."
+        : status === "shipping"
+        ? "Bạn chưa có đơn hàng nào đang giao."
         : status === "completed"
         ? "Bạn chưa có đơn hàng nào đã giao."
         : "Bạn chưa huỷ đơn hàng nào.";

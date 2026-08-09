@@ -126,10 +126,12 @@ function AuthProvider({ children }) {
     );
   }
 
-  // role: "buyer" | "seller" — 1 email/tài khoản có thể có CẢ HAI vai trò
-  // (is_seller đánh dấu tài khoản đã được cấp vai trò Người bán chưa; vai
-  // trò Người mua thì tài khoản nào cũng có sẵn). Mỗi lần đăng nhập chỉ ở
-  // 1 trong 2 vai trò — lưu ở cột active_role, xem thêm confirmRoleSwitch().
+  // role: "buyer" | "seller" — MỖI EMAIL CHỈ ĐĂNG KÝ ĐƯỢC 1 VAI TRÒ DUY
+  // NHẤT (Người mua HOẶC Người bán, không dùng chung cho cả 2). Muốn có cả
+  // 2 vai trò thì phải dùng 2 email khác nhau. is_seller/active_role vẫn
+  // giữ lại trong bảng profiles để tương thích với các tài khoản đã gộp vai
+  // trò từ TRƯỚC khi quy tắc này áp dụng, và signIn() vẫn dùng active_role
+  // để chặn 1 tài khoản đăng nhập nhiều nơi cùng lúc (xem confirmRoleSwitch).
   async function signUp({ email, password, role }) {
     const wantRole = role === "seller" ? "seller" : "buyer";
     const { data, error } = await supabase.auth.signUp({
@@ -143,11 +145,9 @@ function AuthProvider({ children }) {
     //  2. (Phổ biến khi bật "Confirm email", để chống dò xem email nào đã
     //     đăng ký) TRẢ VỀ THÀNH CÔNG GIẢ: có data.user nhưng
     //     data.user.identities là MẢNG RỖNG, không có session — trông y hệt
-    //     "tài khoản mới, cần xác nhận email" (needsEmailConfirmation) NHƯNG
-    //     THỰC RA KHÔNG GỬI EMAIL NÀO CẢ. Đây là nguyên nhân gây ra đúng 2
-    //     hiện tượng: "không có email xác nhận" + "không đăng ký được" —
-    //     trước đây code chỉ bắt case 1 nên rơi vào case 2 là bị "kẹt" ở màn
-    //     hình "kiểm tra email của bạn" mãi mãi mà không có gì xảy ra.
+    //     "tài khoản mới, cần xác nhận email" NHƯNG THỰC RA KHÔNG GỬI EMAIL
+    //     NÀO CẢ. Phải nhận diện cả 2 kiểu thì mới báo đúng cho người dùng
+    //     thay vì để họ "kẹt" ở màn hình chờ email không bao giờ tới.
     const alreadyRegistered =
       (error &&
         (error.message?.includes("already registered") ||
@@ -158,46 +158,7 @@ function AuthProvider({ children }) {
         data.user.identities.length === 0);
 
     if (alreadyRegistered) {
-      // Email này đã có tài khoản (có thể đã đăng ký ở vai trò còn lại
-      // trước đó) — Supabase Auth không cho 2 tài khoản dùng chung 1 email,
-      // nên thay vì báo lỗi/giả vờ thành công, ta xác thực bằng đúng mật
-      // khẩu vừa nhập; nếu khớp thì THÊM vai trò mới vào CHÍNH tài khoản đó.
-      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-      if (signInError) {
-        throw new Error(
-          "Email này đã được dùng cho một tài khoản khác. Nếu đây là tài khoản của bạn, " +
-            "vui lòng nhập đúng mật khẩu tài khoản đó để thêm vai trò mới vào cùng tài khoản."
-        );
-      }
-
-      const userId = signInData.user.id;
-      // Đọc bằng fetchProfileRow (chịu được thiếu cột is_seller/active_role)
-      // để việc "thêm vai trò vào tài khoản có sẵn" luôn thành công, kể cả
-      // khi project chưa chạy schema.sql bản mới nhất.
-      const existingProfile = await fetchProfileRow(userId);
-
-      if (wantRole === "seller" && !existingProfile.is_seller) {
-        // Ghi is_seller không chặn luồng — nếu cột chưa tồn tại (chưa chạy
-        // SQL bản mới), tài khoản coi như tạm thời chỉ đăng nhập được nhờ
-        // role cũ; is_seller sẽ tự đúng sau khi chạy schema.sql.
-        await writeProfileRole(userId, { is_seller: true });
-      }
-
-      if (existingProfile.schemaReady) {
-        const currentActive = existingProfile.active_role || null;
-        if (currentActive && currentActive !== wantRole) {
-          if (!confirmRoleSwitch(currentActive, wantRole)) {
-            await supabase.auth.signOut();
-            return { cancelled: true };
-          }
-        }
-        await writeProfileRole(userId, { active_role: wantRole });
-      }
-
-      return { needsEmailConfirmation: false, linkedExisting: true };
+      throw new Error("Email đã tồn tại, đã được đăng ký trong hệ thống rồi!");
     }
 
     if (error) throw error;
@@ -708,10 +669,11 @@ function OrdersProvider({ children }) {
   }, [user]);
 
   // Đơn hàng có chứa sản phẩm của gian hàng mình — Người bán xem ở trang
-  // /seller, mục "Đơn đang đặt" / "Đơn đã giao" / "Đơn đã huỷ". Truy vấn 3
-  // bước: sản phẩm của gian hàng mình -> order_items chứa các sản phẩm đó
-  // -> orders tương ứng. Mỗi đơn chỉ hiển thị các mục hàng thuộc gian hàng
-  // mình (order có thể có thêm sản phẩm của gian hàng khác).
+  // /seller, mục "Đơn chờ xử lý" / "Đơn đang giao" / "Đơn đã giao" / "Đơn
+  // đã huỷ". Truy vấn 3 bước: sản phẩm của gian hàng mình -> order_items
+  // chứa các sản phẩm đó -> orders tương ứng. Mỗi đơn chỉ hiển thị các mục
+  // hàng thuộc gian hàng mình (order có thể có thêm sản phẩm của gian hàng
+  // khác).
   useEffect(() => {
     let cancelled = false;
 
@@ -852,17 +814,37 @@ function OrdersProvider({ children }) {
   }
 
   // Người mua tự xác nhận đã nhận được hàng -> chuyển đơn sang "đã giao".
-  // Bản demo không có luồng người bán xác nhận giao hàng, nên để người mua
-  // tự xác nhận là cách hợp lý nhất để mục "Đơn đã giao" có dữ liệu thật.
+  // Chỉ xác nhận được khi đơn đang ở trạng thái "shipping" (Người bán đã
+  // bấm "Bắt đầu giao hàng" ở trang /seller) — .eq("status", "shipping")
+  // chặn xác nhận đơn còn "chờ xử lý" (chưa được giao) hoặc đã hoàn tất.
   async function completeOrder(orderId) {
     const { error } = await supabase
       .from("orders")
       .update({ status: "completed" })
       .eq("id", orderId)
-      .eq("status", "processing");
+      .eq("status", "shipping");
     if (error) throw error;
     setOrders((prev) =>
       prev.map((o) => (o.id === orderId ? { ...o, status: "completed" } : o))
+    );
+  }
+
+  // Người bán bấm "Bắt đầu giao hàng" ở trang /seller -> chuyển đơn từ
+  // "chờ xử lý" sang "đang giao". Cập nhật cả sellerOrders (danh sách đơn
+  // của gian hàng) lẫn orders (phòng trường hợp người bán tự mua sản phẩm
+  // của mình, đơn đó cũng nằm trong lịch sử mua hàng của họ ở /account).
+  async function shipOrder(orderId) {
+    const { error } = await supabase
+      .from("orders")
+      .update({ status: "shipping" })
+      .eq("id", orderId)
+      .eq("status", "processing");
+    if (error) throw error;
+    setSellerOrders((prev) =>
+      prev.map((o) => (o.id === orderId ? { ...o, status: "shipping" } : o))
+    );
+    setOrders((prev) =>
+      prev.map((o) => (o.id === orderId ? { ...o, status: "shipping" } : o))
     );
   }
 
@@ -878,6 +860,7 @@ function OrdersProvider({ children }) {
         sellerOrders,
         sellerOrdersHydrated,
         sellerOrdersError,
+        shipOrder,
       }}
     >
       {children}

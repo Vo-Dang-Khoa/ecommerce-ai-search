@@ -74,13 +74,7 @@ function RegisterPageInner() {
     setSubmitting(true);
     try {
       const result = await signUp({ email, password, role });
-      if (result.cancelled) {
-        // Email đã có tài khoản ở vai trò còn lại và người dùng chọn Huỷ ở
-        // hộp thoại xác nhận đăng xuất bên kia — không điều hướng đi đâu cả.
-        setError(
-          `Đã huỷ. Vai trò ${roleLabel} chưa được đăng nhập vì tài khoản đang hoạt động ở vai trò còn lại.`
-        );
-      } else if (result.needsEmailConfirmation) {
+      if (result.needsEmailConfirmation) {
         setNeedsConfirmation(true);
       } else {
         router.push(destinationFor(role));
