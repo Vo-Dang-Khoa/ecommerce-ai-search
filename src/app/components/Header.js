@@ -41,12 +41,6 @@ export default function Header() {
   // trang (KHÔNG dùng dropdown nổi).
   const sellerHref = user?.role === "seller" ? "/seller" : "/login?role=seller";
 
-  // Người mua: bất kỳ tài khoản nào đã đăng nhập (buyer lẫn seller) đều có
-  // thể đặt hàng, nên "Người mua" luôn dẫn tới /account — trang có 4 mục
-  // "Tài khoản người mua" / "Đơn đang xử lý" / "Đơn đã giao" / "Đơn đã huỷ".
-  // Chưa đăng nhập -> điều hướng sang trang đăng nhập, xong quay lại /account.
-  const buyerHref = user ? "/account" : "/login?role=buyer&redirect=/account";
-
   return (
     <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 flex items-center gap-2 sm:gap-4">
@@ -77,9 +71,6 @@ export default function Header() {
             </Link>
             <Link href={sellerHref} className="hover:text-gray-900">
               Người bán
-            </Link>
-            <Link href={buyerHref} className="hover:text-gray-900">
-              Người mua
             </Link>
           </nav>
         </div>
@@ -185,13 +176,6 @@ export default function Header() {
               className="px-2 py-2.5 rounded-md hover:bg-gray-50 text-gray-700"
             >
               Người bán
-            </Link>
-            <Link
-              href={buyerHref}
-              onClick={closeMenu}
-              className="px-2 py-2.5 rounded-md hover:bg-gray-50 text-gray-700"
-            >
-              Người mua
             </Link>
           </nav>
 
