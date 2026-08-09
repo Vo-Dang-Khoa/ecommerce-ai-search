@@ -41,6 +41,11 @@ const SHIPPING_METHODS = [
 
 const PHONE_REGEX = /^(0|\+84)[3-9][0-9]{8}$/;
 
+// Lưu tạm địa chỉ/SĐT vào trình duyệt để tự điền lại lần sau, kể cả khi
+// chưa lưu được vào Supabase (vd: chưa chạy schema.sql cập nhật cột
+// phone/address trong bảng profiles).
+const CONTACT_CACHE_KEY = "shopai_checkout_contact";
+
 export default function CheckoutPage() {
   const router = useRouter();
   const { user, hydrated: authHydrated, updateProfile } = useAuth();
@@ -63,11 +68,19 @@ export default function CheckoutPage() {
   }, [authHydrated, user, router]);
 
   // Điền sẵn số điện thoại/địa chỉ đã lưu từ lần đặt hàng trước (nếu có).
+  // Ưu tiên dữ liệu từ Supabase (profiles.phone/address); nếu chưa có
+  // (vd: Supabase chưa lưu được) thì lấy từ cache trong trình duyệt.
   useEffect(() => {
-    if (user) {
-      setAddress(user.address || "");
-      setPhone(user.phone || "");
+    if (!user) return;
+    let cached = { phone: "", address: "" };
+    try {
+      const raw = localStorage.getItem(CONTACT_CACHE_KEY);
+      if (raw) cached = { ...cached, ...JSON.parse(raw) };
+    } catch {
+      // ignore corrupted cache
     }
+    setAddress(user.address || cached.address || "");
+    setPhone(user.phone || cached.phone || "");
   }, [user]);
 
   const shippingFee =
@@ -87,16 +100,37 @@ export default function CheckoutPage() {
 
     setError("");
     setSubmitting(true);
+
+    const contact = { phone: phone.trim(), address: address.trim() };
+
+    // Luôn lưu tạm vào trình duyệt trước — không phụ thuộc Supabase, để
+    // lần đặt hàng sau vẫn tự điền được kể cả khi bước lưu hồ sơ bên dưới
+    // thất bại.
     try {
-      // Lưu lại địa chỉ/số điện thoại vào hồ sơ để lần đặt hàng sau tự điền.
-      await updateProfile({ phone: phone.trim(), address: address.trim() });
-      clearCart();
-      setSuccess(true);
-    } catch (err) {
-      setError(err?.message || "Có lỗi xảy ra, vui lòng thử lại.");
-    } finally {
-      setSubmitting(false);
+      localStorage.setItem(CONTACT_CACHE_KEY, JSON.stringify(contact));
+    } catch {
+      // ignore storage errors (vd: trình duyệt chặn localStorage)
     }
+
+    // Lưu địa chỉ/SĐT vào hồ sơ Supabase chỉ là "tiện lợi thêm" cho lần
+    // đặt hàng sau — KHÔNG được để lỗi ở bước này (vd: "Could not find the
+    // 'address' column of 'profiles'" khi project Supabase chưa chạy
+    // schema.sql cập nhật 2 cột phone/address) chặn việc đặt hàng thành
+    // công. Lỗi này chỉ ghi log để debug, không hiển thị cho khách.
+    try {
+      await updateProfile(contact);
+    } catch (profileErr) {
+      console.warn(
+        "[Checkout] Không lưu được địa chỉ/SĐT vào hồ sơ Supabase (đơn hàng vẫn được xác nhận). " +
+          "Nếu lỗi là 'Could not find the address column...', hãy chạy lại supabase/schema.sql " +
+          "trong Supabase SQL Editor để thêm 2 cột phone/address vào bảng profiles.",
+        profileErr
+      );
+    }
+
+    clearCart();
+    setSuccess(true);
+    setSubmitting(false);
   }
 
   if (success) {
@@ -107,7 +141,7 @@ export default function CheckoutPage() {
         <div className="max-w-2xl mx-auto px-4 py-20 text-center">
           <p className="text-5xl mb-4">🎉</p>
           <h1 className="text-2xl font-bold text-gray-900 mb-2">
-            Đặt hàng thành công!
+            Đã đặt hàng thành công!
           </h1>
           <p className="text-gray-600 mb-2">
             Thanh toán: {payment?.label} · Giao hàng: {shipping?.label}
