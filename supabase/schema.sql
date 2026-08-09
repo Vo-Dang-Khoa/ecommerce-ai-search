@@ -1,9 +1,10 @@
--- ShopAI (ecommerce-ai-search) — Supabase schema (v2: thêm Supabase Auth thật
--- + phân vai trò Người mua / Người bán, thay cho cơ chế đăng nhập giả lập).
+-- ShopAI (ecommerce-ai-search) — Supabase schema (v3: thêm Supabase Auth thật
+-- + phân vai trò Người mua / Người bán, thay cho cơ chế đăng nhập giả lập;
+-- + thêm số điện thoại/địa chỉ giao hàng của khách cho trang /checkout).
 --
--- File này AN TOÀN để chạy lại (idempotent). Nếu bạn đã chạy bản v1 trước đó,
--- chỉ cần chạy lại TOÀN BỘ file v2 này thêm 1 lần — nó tự thêm bảng/cột/policy
--- mới, không xoá dữ liệu gian hàng/sản phẩm đã có.
+-- File này AN TOÀN để chạy lại (idempotent). Nếu bạn đã chạy bản v1/v2 trước
+-- đó, chỉ cần chạy lại TOÀN BỘ file v3 này thêm 1 lần — nó tự thêm bảng/cột/
+-- policy mới, không xoá dữ liệu tài khoản/gian hàng/sản phẩm đã có.
 --
 -- Cách chạy: Supabase Dashboard > project của bạn > SQL Editor > New query
 -- > dán toàn bộ nội dung file này > Run.
