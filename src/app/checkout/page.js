@@ -3,42 +3,10 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth, useCart } from "../providers";
+import { useAuth, useCart, useOrders } from "../providers";
 import { getEffectivePrice, getProductImage } from "@/lib/shops";
 import { readContactCache, writeContactCache } from "@/lib/contactCache";
-
-const PAYMENT_METHODS = [
-  {
-    id: "cod",
-    label: "Thanh toán khi nhận hàng (COD)",
-    desc: "Trả tiền mặt cho shipper khi nhận được hàng.",
-  },
-  {
-    id: "bank",
-    label: "Chuyển khoản ngân hàng",
-    desc: "Chuyển khoản trước, đơn hàng được xử lý sau khi xác nhận thanh toán.",
-  },
-  {
-    id: "ewallet",
-    label: "Ví điện tử (Momo / ZaloPay)",
-    desc: "Quét mã QR thanh toán qua ví điện tử.",
-  },
-];
-
-const SHIPPING_METHODS = [
-  {
-    id: "standard",
-    label: "Giao hàng tiêu chuẩn",
-    desc: "Nhận hàng sau 2-3 ngày.",
-    fee: 20000,
-  },
-  {
-    id: "express",
-    label: "Giao hàng nhanh",
-    desc: "Nhận hàng trong ngày.",
-    fee: 40000,
-  },
-];
+import { PAYMENT_METHODS, SHIPPING_METHODS } from "@/lib/orderOptions";
 
 const PHONE_REGEX = /^(0|\+84)[3-9][0-9]{8}$/;
 
@@ -46,6 +14,7 @@ export default function CheckoutPage() {
   const router = useRouter();
   const { user, hydrated: authHydrated, updateProfile } = useAuth();
   const { items, totalPrice, clearCart } = useCart();
+  const { placeOrder } = useOrders();
 
   const [paymentMethod, setPaymentMethod] = useState("cod");
   const [shippingMethod, setShippingMethod] = useState("standard");
@@ -111,6 +80,29 @@ export default function CheckoutPage() {
           "Nếu lỗi là 'Could not find the address column...', hãy chạy lại supabase/schema.sql " +
           "trong Supabase SQL Editor để thêm 2 cột phone/address vào bảng profiles.",
         profileErr
+      );
+    }
+
+    // Tạo đơn hàng thật (bảng orders/order_items) để xem lại ở /account.
+    // Cũng KHÔNG chặn "Đặt hàng thành công" nếu lỗi (vd: project chưa chạy
+    // bản schema.sql mới nhất để tạo 2 bảng này) — chỉ ghi log để debug.
+    try {
+      await placeOrder({
+        items,
+        paymentMethod,
+        shippingMethod,
+        shippingFee,
+        subtotal: totalPrice,
+        total: grandTotal,
+        address: contact.address,
+        phone: contact.phone,
+      });
+    } catch (orderErr) {
+      console.warn(
+        "[Checkout] Không lưu được đơn hàng vào Supabase (đơn hàng vẫn được xác nhận, " +
+          "nhưng sẽ không xuất hiện trong lịch sử ở trang /account). Có thể project chưa " +
+          "chạy supabase/schema.sql (bản mới nhất) để tạo bảng orders/order_items.",
+        orderErr
       );
     }
 

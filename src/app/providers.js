@@ -2,12 +2,13 @@
 
 import { createContext, useContext, useEffect, useState } from "react";
 import { PRODUCTS } from "@/lib/products";
-import { getEffectivePrice } from "@/lib/shops";
+import { getEffectivePrice, getProductImage } from "@/lib/shops";
 import { supabase } from "@/lib/supabaseClient";
 
 const CartContext = createContext(null);
 const AuthContext = createContext(null);
 const ShopContext = createContext(null);
+const OrdersContext = createContext(null);
 
 const CART_KEY = "shopai_cart";
 
@@ -389,6 +390,189 @@ function ShopProvider({ children }) {
   );
 }
 
+// --- Chuyển đổi 1 dòng orders + các dòng order_items liên quan thành 1
+// object đơn hàng cho UI (trang /account) dùng.
+function mapOrder(row, itemRows) {
+  return {
+    id: row.id,
+    status: row.status,
+    paymentMethod: row.payment_method,
+    shippingMethod: row.shipping_method,
+    shippingFee: Number(row.shipping_fee),
+    subtotal: Number(row.subtotal),
+    total: Number(row.total),
+    address: row.address,
+    phone: row.phone,
+    createdAt: row.created_at,
+    items: (itemRows || []).map((it) => ({
+      id: it.id,
+      productId: it.product_id,
+      name: it.product_name,
+      image: it.product_image,
+      unitPrice: Number(it.unit_price),
+      qty: it.qty,
+    })),
+  };
+}
+
+// Đơn hàng của Người mua — tạo ra ở trang /checkout, xem lại/huỷ/xác nhận
+// đã nhận hàng ở trang /account (mục "Người mua" trong header). Bất kỳ tài
+// khoản đã đăng nhập nào (buyer lẫn seller) đều có thể đặt hàng và có lịch
+// sử đơn hàng riêng — orders được lọc theo buyer_id = tài khoản hiện tại.
+function OrdersProvider({ children }) {
+  const { user } = useAuth();
+  const [orders, setOrders] = useState([]);
+  const [hydrated, setHydrated] = useState(false);
+  const [loadError, setLoadError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      if (!user) {
+        setOrders([]);
+        setLoadError("");
+        setHydrated(true);
+        return;
+      }
+      try {
+        const { data: orderRows, error: ordersErr } = await supabase
+          .from("orders")
+          .select("*")
+          .eq("buyer_id", user.id)
+          .order("created_at", { ascending: false });
+        if (ordersErr) throw ordersErr;
+
+        const orderIds = (orderRows || []).map((o) => o.id);
+        let itemRows = [];
+        if (orderIds.length > 0) {
+          const { data, error: itemsErr } = await supabase
+            .from("order_items")
+            .select("*")
+            .in("order_id", orderIds);
+          if (itemsErr) throw itemsErr;
+          itemRows = data || [];
+        }
+        if (cancelled) return;
+
+        setOrders(
+          (orderRows || []).map((row) =>
+            mapOrder(
+              row,
+              itemRows.filter((it) => it.order_id === row.id)
+            )
+          )
+        );
+        setLoadError("");
+      } catch (err) {
+        if (!cancelled) {
+          console.error("[OrdersProvider] Không tải được đơn hàng:", err);
+          setLoadError(
+            "Không tải được lịch sử đơn hàng từ Supabase. Có thể project chưa chạy " +
+              "supabase/schema.sql (bản mới nhất) để tạo bảng orders/order_items."
+          );
+        }
+      } finally {
+        if (!cancelled) setHydrated(true);
+      }
+    }
+
+    setHydrated(false);
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  // items: mảng { product, qty } lấy từ useCart().items ngay trước khi
+  // clearCart() ở trang /checkout.
+  async function placeOrder({
+    items,
+    paymentMethod,
+    shippingMethod,
+    shippingFee,
+    subtotal,
+    total,
+    address,
+    phone,
+  }) {
+    if (!user) throw new Error("Bạn cần đăng nhập trước.");
+
+    const { data: orderRow, error: orderErr } = await supabase
+      .from("orders")
+      .insert({
+        buyer_id: user.id,
+        status: "processing",
+        payment_method: paymentMethod,
+        shipping_method: shippingMethod,
+        shipping_fee: shippingFee,
+        subtotal,
+        total,
+        address,
+        phone,
+      })
+      .select()
+      .single();
+    if (orderErr) throw orderErr;
+
+    const itemRows = items.map((it) => ({
+      order_id: orderRow.id,
+      product_id: String(it.product.id),
+      product_name: it.product.name,
+      product_image: getProductImage(it.product) || null,
+      unit_price: getEffectivePrice(it.product),
+      qty: it.qty,
+    }));
+
+    const { data: insertedItems, error: itemsErr } = await supabase
+      .from("order_items")
+      .insert(itemRows)
+      .select();
+    if (itemsErr) throw itemsErr;
+
+    const order = mapOrder(orderRow, insertedItems);
+    setOrders((prev) => [order, ...prev]);
+    return order;
+  }
+
+  // Người mua tự huỷ đơn khi đơn còn "đang xử lý" (chưa xác nhận đã nhận
+  // hàng). Điều kiện .eq("status", "processing") chặn huỷ đơn đã hoàn tất.
+  async function cancelOrder(orderId) {
+    const { error } = await supabase
+      .from("orders")
+      .update({ status: "cancelled" })
+      .eq("id", orderId)
+      .eq("status", "processing");
+    if (error) throw error;
+    setOrders((prev) =>
+      prev.map((o) => (o.id === orderId ? { ...o, status: "cancelled" } : o))
+    );
+  }
+
+  // Người mua tự xác nhận đã nhận được hàng -> chuyển đơn sang "đã mua".
+  // Bản demo không có luồng người bán xác nhận giao hàng, nên để người mua
+  // tự xác nhận là cách hợp lý nhất để mục "Đơn đã mua" có dữ liệu thật.
+  async function completeOrder(orderId) {
+    const { error } = await supabase
+      .from("orders")
+      .update({ status: "completed" })
+      .eq("id", orderId)
+      .eq("status", "processing");
+    if (error) throw error;
+    setOrders((prev) =>
+      prev.map((o) => (o.id === orderId ? { ...o, status: "completed" } : o))
+    );
+  }
+
+  return (
+    <OrdersContext.Provider
+      value={{ orders, hydrated, loadError, placeOrder, cancelOrder, completeOrder }}
+    >
+      {children}
+    </OrdersContext.Provider>
+  );
+}
+
 function CartProvider({ children }) {
   const { allProducts } = useShop();
   const [items, setItems] = useState([]);
@@ -472,7 +656,9 @@ export function Providers({ children }) {
   return (
     <AuthProvider>
       <ShopProvider>
-        <CartProvider>{children}</CartProvider>
+        <OrdersProvider>
+          <CartProvider>{children}</CartProvider>
+        </OrdersProvider>
       </ShopProvider>
     </AuthProvider>
   );
@@ -493,5 +679,11 @@ export function useAuth() {
 export function useShop() {
   const ctx = useContext(ShopContext);
   if (!ctx) throw new Error("useShop must be used within Providers");
+  return ctx;
+}
+
+export function useOrders() {
+  const ctx = useContext(OrdersContext);
+  if (!ctx) throw new Error("useOrders must be used within Providers");
   return ctx;
 }

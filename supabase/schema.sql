@@ -1,10 +1,12 @@
--- ShopAI (ecommerce-ai-search) — Supabase schema (v3: thêm Supabase Auth thật
+-- ShopAI (ecommerce-ai-search) — Supabase schema (v4: thêm Supabase Auth thật
 -- + phân vai trò Người mua / Người bán, thay cho cơ chế đăng nhập giả lập;
--- + thêm số điện thoại/địa chỉ giao hàng của khách cho trang /checkout).
+-- + thêm số điện thoại/địa chỉ giao hàng của khách cho trang /checkout;
+-- + thêm bảng orders/order_items để lưu đơn hàng thật, hiển thị ở trang
+--   /account với 3 mục: Đơn đang xử lý / Đơn đã mua / Đơn đã huỷ).
 --
--- File này AN TOÀN để chạy lại (idempotent). Nếu bạn đã chạy bản v1/v2 trước
--- đó, chỉ cần chạy lại TOÀN BỘ file v3 này thêm 1 lần — nó tự thêm bảng/cột/
--- policy mới, không xoá dữ liệu tài khoản/gian hàng/sản phẩm đã có.
+-- File này AN TOÀN để chạy lại (idempotent). Nếu bạn đã chạy bản v1/v2/v3
+-- trước đó, chỉ cần chạy lại TOÀN BỘ file v4 này thêm 1 lần — nó tự thêm
+-- bảng/cột/policy mới, không xoá dữ liệu tài khoản/gian hàng/sản phẩm đã có.
 --
 -- Cách chạy: Supabase Dashboard > project của bạn > SQL Editor > New query
 -- > dán toàn bộ nội dung file này > Run.
@@ -181,3 +183,70 @@ drop policy if exists "Public can delete product images" on storage.objects;
 drop policy if exists "Authenticated can delete product images" on storage.objects;
 create policy "Authenticated can delete product images" on storage.objects
   for delete to authenticated using (bucket_id = 'product-images');
+
+-- ============================================================
+-- 6. Đơn hàng — tạo ra khi Người mua bấm "Xác nhận đặt hàng" ở /checkout,
+--    xem lại ở /account (mục "Người mua" trong header) theo 3 trạng thái:
+--    processing (đang xử lý), completed (đã mua/đã nhận hàng), cancelled
+--    (đã huỷ). order_items lưu lại tên/ảnh/giá tại THỜI ĐIỂM đặt hàng
+--    (snapshot) để lịch sử đơn hàng không đổi kể cả khi sau này người bán
+--    sửa/xoá sản phẩm.
+-- ============================================================
+create table if not exists orders (
+  id uuid primary key default gen_random_uuid(),
+  buyer_id uuid not null references auth.users (id) on delete cascade,
+  status text not null default 'processing'
+    check (status in ('processing', 'completed', 'cancelled')),
+  payment_method text not null,
+  shipping_method text not null,
+  shipping_fee numeric not null default 0,
+  subtotal numeric not null default 0,
+  total numeric not null default 0,
+  address text not null default '',
+  phone text not null default '',
+  created_at timestamptz not null default now()
+);
+
+create index if not exists orders_buyer_id_idx on orders (buyer_id);
+
+create table if not exists order_items (
+  id uuid primary key default gen_random_uuid(),
+  order_id uuid not null references orders (id) on delete cascade,
+  -- product_id lưu dạng text (không đặt foreign key) vì sản phẩm demo tĩnh
+  -- trong src/lib/products.js dùng id dạng chuỗi, không phải uuid như sản
+  -- phẩm thật trong bảng products.
+  product_id text not null,
+  product_name text not null,
+  product_image text,
+  unit_price numeric not null default 0,
+  qty integer not null default 1
+);
+
+create index if not exists order_items_order_id_idx on order_items (order_id);
+
+alter table orders enable row level security;
+alter table order_items enable row level security;
+
+drop policy if exists "Buyers can read own orders" on orders;
+create policy "Buyers can read own orders" on orders
+  for select using (auth.uid() = buyer_id);
+
+drop policy if exists "Buyers can insert own orders" on orders;
+create policy "Buyers can insert own orders" on orders
+  for insert with check (auth.uid() = buyer_id);
+
+drop policy if exists "Buyers can update own orders" on orders;
+create policy "Buyers can update own orders" on orders
+  for update using (auth.uid() = buyer_id);
+
+drop policy if exists "Buyers can read own order items" on order_items;
+create policy "Buyers can read own order items" on order_items
+  for select using (
+    order_id in (select id from orders where buyer_id = auth.uid())
+  );
+
+drop policy if exists "Buyers can insert own order items" on order_items;
+create policy "Buyers can insert own order items" on order_items
+  for insert with check (
+    order_id in (select id from orders where buyer_id = auth.uid())
+  );
