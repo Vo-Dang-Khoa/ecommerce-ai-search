@@ -17,6 +17,7 @@ export const PRODUCTS = [
     price: 320000,
     emoji: "🎂",
     desc: "Cốt bánh chocolate ẩm mềm, phủ kem fudge đậm vị, trang trí theo yêu cầu.",
+    images: ["/products/bsn-1.jpg"],
   },
   {
     id: "bsn-2",
