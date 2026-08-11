@@ -872,6 +872,10 @@ function CartProvider({ children }) {
   const { allProducts } = useShop();
   const [items, setItems] = useState([]);
   const [hydrated, setHydrated] = useState(false);
+  // "Mua ngay": chỉ giữ tạm 1 sản phẩm + số lượng trong state (KHÔNG lưu
+  // localStorage, KHÔNG đụng tới giỏ hàng thật) để trang /checkout đặt hàng
+  // đúng 1 sản phẩm này, không lẫn với các sản phẩm khác đang có trong giỏ.
+  const [buyNowItem, setBuyNowItem] = useState(null);
 
   useEffect(() => {
     try {
@@ -917,6 +921,18 @@ function CartProvider({ children }) {
     setItems([]);
   }
 
+  // Gọi từ nút "Mua ngay" ở ProductCard/quick-view — KHÔNG thêm vào giỏ
+  // hàng thật, chỉ ghi nhớ tạm 1 sản phẩm để /checkout dùng riêng.
+  function buyNow(id, qty = 1) {
+    setBuyNowItem({ id, qty });
+  }
+
+  // Xoá "Mua ngay" sau khi đặt hàng xong (hoặc khi người dùng rời trang
+  // /checkout mà không xác nhận), tránh lần "Mua ngay" sau bị lẫn dữ liệu cũ.
+  function clearBuyNow() {
+    setBuyNowItem(null);
+  }
+
   const detailedItems = items
     .map((it) => {
       const product = allProducts.find((p) => p.id === it.id);
@@ -930,6 +946,16 @@ function CartProvider({ children }) {
     0
   );
 
+  // Sản phẩm "Mua ngay" kèm đầy đủ thông tin product (giống detailedItems ở
+  // trên) để /checkout hiển thị và tính tiền — null nếu chưa bấm "Mua ngay",
+  // hoặc nếu sản phẩm đó không còn tồn tại (vd: người bán đã xoá).
+  const buyNowDetailedItem = buyNowItem
+    ? (() => {
+        const product = allProducts.find((p) => p.id === buyNowItem.id);
+        return product ? { ...buyNowItem, product } : null;
+      })()
+    : null;
+
   return (
     <CartContext.Provider
       value={{
@@ -940,6 +966,9 @@ function CartProvider({ children }) {
         removeItem,
         updateQty,
         clearCart,
+        buyNowItem: buyNowDetailedItem,
+        buyNow,
+        clearBuyNow,
       }}
     >
       {children}

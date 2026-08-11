@@ -13,8 +13,17 @@ const PHONE_REGEX = /^(0|\+84)[3-9][0-9]{8}$/;
 export default function CheckoutPage() {
   const router = useRouter();
   const { user, hydrated: authHydrated, updateProfile } = useAuth();
-  const { items, totalPrice, clearCart } = useCart();
+  const { items: cartItems, totalPrice: cartTotalPrice, buyNowItem, clearCart, clearBuyNow } = useCart();
   const { placeOrder } = useOrders();
+
+  // Vào /checkout từ nút "Mua ngay" (ProductCard) -> chỉ đặt đúng 1 sản
+  // phẩm đó, không đụng tới giỏ hàng thật. Vào từ trang /cart (nút "Thanh
+  // toán") -> đặt toàn bộ giỏ hàng như trước.
+  const isBuyNow = !!buyNowItem;
+  const items = isBuyNow ? [buyNowItem] : cartItems;
+  const totalPrice = isBuyNow
+    ? getEffectivePrice(buyNowItem.product) * buyNowItem.qty
+    : cartTotalPrice;
 
   const [paymentMethod, setPaymentMethod] = useState("cod");
   const [shippingMethod, setShippingMethod] = useState("standard");
@@ -106,7 +115,13 @@ export default function CheckoutPage() {
       );
     }
 
-    clearCart();
+    // "Mua ngay": chỉ xoá sản phẩm "mua ngay" tạm thời, KHÔNG đụng tới giỏ
+    // hàng thật (các sản phẩm khác đang có trong giỏ vẫn giữ nguyên).
+    if (isBuyNow) {
+      clearBuyNow();
+    } else {
+      clearCart();
+    }
     setSuccess(true);
     setSubmitting(false);
   }

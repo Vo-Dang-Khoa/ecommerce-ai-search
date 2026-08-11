@@ -1,12 +1,16 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useCart } from "../providers";
 import { getEffectivePrice, getProductImage } from "@/lib/shops";
+import ProductQuickView from "./ProductQuickView";
 
 export default function ProductCard({ product, reason }) {
-  const { addItem } = useCart();
+  const router = useRouter();
+  const { addItem, buyNow } = useCart();
   const [added, setAdded] = useState(false);
+  const [showQuickView, setShowQuickView] = useState(false);
   const image = getProductImage(product);
   const effectivePrice = getEffectivePrice(product);
   const onSale = effectivePrice < product.price;
@@ -15,6 +19,13 @@ export default function ProductCard({ product, reason }) {
     addItem(product.id, 1);
     setAdded(true);
     setTimeout(() => setAdded(false), 1500);
+  }
+
+  // "Mua ngay": khách chỉ muốn mua đúng 1 sản phẩm này -> ghi nhớ tạm rồi
+  // vào thẳng /checkout, không cần thêm vào giỏ hàng trước.
+  function handleBuyNow() {
+    buyNow(product.id, 1);
+    router.push("/checkout");
   }
 
   return (
@@ -44,22 +55,49 @@ export default function ProductCard({ product, reason }) {
           🤖 {reason}
         </p>
       )}
-      <div className="flex items-center justify-between mt-2">
-        <span className="font-semibold text-gray-900 flex items-center gap-2">
-          {onSale && (
-            <span className="text-xs text-gray-400 line-through font-normal">
-              {product.price.toLocaleString("vi-VN")}đ
-            </span>
-          )}
-          {effectivePrice.toLocaleString("vi-VN")}đ
-        </span>
+
+      <span className="font-semibold text-gray-900 flex items-center gap-2 mt-2">
+        {onSale && (
+          <span className="text-xs text-gray-400 line-through font-normal">
+            {product.price.toLocaleString("vi-VN")}đ
+          </span>
+        )}
+        {effectivePrice.toLocaleString("vi-VN")}đ
+      </span>
+
+      {/* 3 nút hành động: "Xem nhanh" (đọc thêm thông tin sản phẩm, mở
+          modal), "Mua ngay" (chỉ mua 1 sản phẩm này, vào thẳng /checkout),
+          "Thêm vào giỏ" (mua nhiều sản phẩm, gom vào giỏ hàng trước). */}
+      <div className="grid grid-cols-3 gap-1.5 mt-1">
         <button
+          type="button"
+          onClick={() => setShowQuickView(true)}
+          className="text-xs font-medium border border-gray-300 text-gray-700 rounded-md py-2 hover:border-gray-900 hover:text-gray-900 transition-colors"
+        >
+          Xem nhanh
+        </button>
+        <button
+          type="button"
+          onClick={handleBuyNow}
+          className="text-xs font-medium bg-amber-600 text-white rounded-md py-2 hover:bg-amber-700 transition-colors"
+        >
+          Mua ngay
+        </button>
+        <button
+          type="button"
           onClick={handleAdd}
-          className="text-sm bg-gray-900 text-white px-3 py-1.5 rounded-md hover:bg-gray-800 transition-colors"
+          className="text-xs font-medium bg-gray-900 text-white rounded-md py-2 hover:bg-gray-800 transition-colors"
         >
           {added ? "Đã thêm ✓" : "Thêm vào giỏ"}
         </button>
       </div>
+
+      {showQuickView && (
+        <ProductQuickView
+          product={product}
+          onClose={() => setShowQuickView(false)}
+        />
+      )}
     </div>
   );
 }
