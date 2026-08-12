@@ -1,22 +1,24 @@
--- ShopAI (ecommerce-ai-search) — Supabase schema (v9: thêm danh mục cha
--- "THUỐC & SỨC KHỎE" vào cây danh mục — xem mục 9 cuối file).
+-- ShopAI (ecommerce-ai-search) — Supabase schema (v10: sắp xếp lại vị trí
+-- danh mục cha "THUỐC & SỨC KHỎE" — nằm giữa "THỰC PHẨM TƯƠI SỐNG & NGUYÊN
+-- LIỆU" và "THỜI TRANG & PHỤ KIỆN" trên Sidebar, xem mục 9 cuối file).
 --
--- Lịch sử: v8 cấu trúc lại Danh mục (Taxonomy) — thêm bảng `categories`
--- (cây danh mục đa cấp, tự tham chiếu qua parent_id: Danh mục cha -> Loại
--- sản phẩm -> ...), bảng `category_attributes` (khai báo thuộc tính có thể
--- LỌC theo từng danh mục, phục vụ bộ lọc động mà KHÔNG cần đổi cấu trúc
--- bảng products), cột `products.category_id` (liên kết sản phẩm với cây
--- danh mục mới, giữ nguyên cột `products.category` cũ dạng text — KHÔNG
--- xoá), và mở rộng `profiles.role` để có thêm vai trò 'admin'; v7 thêm
--- trạng thái đơn hàng "shipping" (Đơn đang giao); v6 cho phép 1 email vừa
--- là tài khoản Người mua vừa là Người bán (cột is_seller/active_role); v5
--- thêm cột attributes (thuộc tính sản phẩm) + policy Người bán xem đơn
--- hàng chứa sản phẩm của mình; v4 thêm Supabase Auth thật + phân vai trò +
--- số điện thoại/địa chỉ giao hàng + bảng orders/order_items.
+-- Lịch sử: v9 thêm danh mục cha "THUỐC & SỨC KHỎE"; v8 cấu trúc lại Danh
+-- mục (Taxonomy) — thêm bảng `categories` (cây danh mục đa cấp, tự tham
+-- chiếu qua parent_id: Danh mục cha -> Loại sản phẩm -> ...), bảng
+-- `category_attributes` (khai báo thuộc tính có thể LỌC theo từng danh mục,
+-- phục vụ bộ lọc động mà KHÔNG cần đổi cấu trúc bảng products), cột
+-- `products.category_id` (liên kết sản phẩm với cây danh mục mới, giữ
+-- nguyên cột `products.category` cũ dạng text — KHÔNG xoá), và mở rộng
+-- `profiles.role` để có thêm vai trò 'admin'; v7 thêm trạng thái đơn hàng
+-- "shipping" (Đơn đang giao); v6 cho phép 1 email vừa là tài khoản Người
+-- mua vừa là Người bán (cột is_seller/active_role); v5 thêm cột attributes
+-- (thuộc tính sản phẩm) + policy Người bán xem đơn hàng chứa sản phẩm của
+-- mình; v4 thêm Supabase Auth thật + phân vai trò + số điện thoại/địa chỉ
+-- giao hàng + bảng orders/order_items.
 --
--- File này AN TOÀN để chạy lại (idempotent). Nếu bạn đã chạy bản v1-v8 trước
--- đó, chỉ cần chạy lại TOÀN BỘ file v9 này thêm 1 lần — nó tự thêm
--- bảng/cột/policy/danh mục mới, không xoá dữ liệu tài khoản/gian hàng/sản
+-- File này AN TOÀN để chạy lại (idempotent). Nếu bạn đã chạy bản v1-v9 trước
+-- đó, chỉ cần chạy lại TOÀN BỘ file v10 này thêm 1 lần — nó tự thêm/sửa
+-- bảng/cột/policy/danh mục, không xoá dữ liệu tài khoản/gian hàng/sản
 -- phẩm/danh mục đã có.
 --
 -- Cách chạy: Supabase Dashboard > project của bạn > SQL Editor > New query
@@ -422,25 +424,43 @@ create policy "Public can read category attributes" on category_attributes
   for select using (true);
 
 -- 12 danh mục cha — 11 danh mục gốc theo đúng thứ tự đề bài (v8) + "THUỐC &
--- SỨC KHỎE" (v9, thêm theo yêu cầu). sort_order dùng để sắp xếp Sidebar.
+-- SỨC KHỎE" (v9, chèn giữa "THỰC PHẨM TƯƠI SỐNG & NGUYÊN LIỆU" và "THỜI
+-- TRANG & PHỤ KIỆN" theo yêu cầu v10). sort_order dùng để sắp xếp Sidebar.
 -- on conflict (slug) do nothing: nếu bạn đã chạy bản v8 trước đó, 11 danh
 -- mục cũ SẼ KHÔNG bị đổi/nhân đôi — chỉ riêng dòng "THUỐC & SỨC KHỎE" (slug
--- mới, chưa từng có) được thêm vào.
+-- mới, chưa từng có) được thêm vào. Vị trí (sort_order) của các dòng ĐÃ TỒN
+-- TẠI từ trước được sửa riêng bằng các câu UPDATE bên dưới, vì INSERT ...
+-- on conflict do nothing KHÔNG cập nhật được dòng đã có sẵn.
 insert into categories (slug, name, parent_id, sort_order) values
   ('thuc-pham-che-bien-do-uong', 'THỰC PHẨM ĐÃ CHẾ BIẾN & ĐỒ UỐNG', null, 1),
   ('thuc-pham-tuoi-song-nguyen-lieu', 'THỰC PHẨM TƯƠI SỐNG & NGUYÊN LIỆU', null, 2),
-  ('thuoc-suc-khoe', 'THUỐC & SỨC KHỎE', null, 12),
-  ('thoi-trang-phu-kien', 'THỜI TRANG & PHỤ KIỆN', null, 3),
-  ('thiet-bi-dien-dien-tu', 'THIẾT BỊ ĐIỆN & ĐIỆN TỬ', null, 4),
-  ('my-pham-cham-soc-ca-nhan', 'MỸ PHẨM & CHĂM SÓC CÁ NHÂN', null, 5),
-  ('noi-that-van-phong-pham', 'NỘI THẤT & VĂN PHÒNG PHẨM', null, 6),
-  ('xay-dung-thiet-ke', 'XÂY DỰNG & THIẾT KẾ', null, 7),
-  ('dich-vu-sua-chua', 'DỊCH VỤ & SỬA CHỮA', null, 8),
-  ('du-lich-da-ngoai', 'DU LỊCH & DÃ NGOẠI', null, 9),
-  ('sach-do-dung-hoc-tap', 'SÁCH & ĐỒ DÙNG HỌC TẬP', null, 10),
-  ('nganh-hang-khac', 'NGÀNH HÀNG KHÁC', null, 11),
-  ('thuoc-suc-khoe', 'THUỐC & SỨC KHỎE', null, 12)
+  ('thuoc-suc-khoe', 'THUỐC & SỨC KHỎE', null, 3),
+  ('thoi-trang-phu-kien', 'THỜI TRANG & PHỤ KIỆN', null, 4),
+  ('thiet-bi-dien-dien-tu', 'THIẾT BỊ ĐIỆN & ĐIỆN TỬ', null, 5),
+  ('my-pham-cham-soc-ca-nhan', 'MỸ PHẨM & CHĂM SÓC CÁ NHÂN', null, 6),
+  ('noi-that-van-phong-pham', 'NỘI THẤT & VĂN PHÒNG PHẨM', null, 7),
+  ('xay-dung-thiet-ke', 'XÂY DỰNG & THIẾT KẾ', null, 8),
+  ('dich-vu-sua-chua', 'DỊCH VỤ & SỬA CHỮA', null, 9),
+  ('du-lich-da-ngoai', 'DU LỊCH & DÃ NGOẠI', null, 10),
+  ('sach-do-dung-hoc-tap', 'SÁCH & ĐỒ DÙNG HỌC TẬP', null, 11),
+  ('nganh-hang-khac', 'NGÀNH HÀNG KHÁC', null, 12)
 on conflict (slug) do nothing;
+
+-- v10: đảm bảo đúng thứ tự trên cho CẢ những ai đã chạy bản v9 trước đó
+-- (khi "THUỐC & SỨC KHỎE" từng được thêm ở cuối, sort_order = 12). Dùng
+-- UPDATE theo slug — an toàn chạy lại nhiều lần (ghi đè cùng 1 giá trị).
+update categories set sort_order = 1 where slug = 'thuc-pham-che-bien-do-uong';
+update categories set sort_order = 2 where slug = 'thuc-pham-tuoi-song-nguyen-lieu';
+update categories set sort_order = 3 where slug = 'thuoc-suc-khoe';
+update categories set sort_order = 4 where slug = 'thoi-trang-phu-kien';
+update categories set sort_order = 5 where slug = 'thiet-bi-dien-dien-tu';
+update categories set sort_order = 6 where slug = 'my-pham-cham-soc-ca-nhan';
+update categories set sort_order = 7 where slug = 'noi-that-van-phong-pham';
+update categories set sort_order = 8 where slug = 'xay-dung-thiet-ke';
+update categories set sort_order = 9 where slug = 'dich-vu-sua-chua';
+update categories set sort_order = 10 where slug = 'du-lich-da-ngoai';
+update categories set sort_order = 11 where slug = 'sach-do-dung-hoc-tap';
+update categories set sort_order = 12 where slug = 'nganh-hang-khac';
 
 -- Danh mục con (Loại sản phẩm) cho "THỰC PHẨM ĐÃ CHẾ BIẾN & ĐỒ UỐNG" — dự án
 -- hiện tại là tiệm bánh, nên 8 danh mục bánh cũ (CATEGORIES trong
