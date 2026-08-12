@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCart } from "../providers";
 import { getEffectivePrice, getProductImage } from "@/lib/shops";
@@ -35,21 +36,27 @@ export default function ProductCard({ product, reason }) {
           -{product.promotion.percent}%
         </span>
       )}
-      {image ? (
-        // eslint-disable-next-line @next/next/no-img-element -- user-uploaded data URLs/arbitrary URLs, not optimizable by next/image
-        <img
-          src={image}
-          alt={product.name}
-          className="w-full h-32 object-cover rounded-lg bg-amber-50"
-        />
-      ) : (
-        <span className="text-4xl">{product.emoji}</span>
-      )}
-      <h3 className="font-semibold text-gray-900">{product.name}</h3>
-      <p className="text-xs text-amber-700 bg-amber-50 rounded-full px-2 py-0.5 w-fit">
-        {product.category}
-      </p>
-      <p className="text-sm text-gray-500 flex-1">{product.desc}</p>
+      {/* Bấm vào ảnh/tên/mô tả -> sang trang chi tiết sản phẩm
+          (/san-pham/[id]), xem đầy đủ thông tin/mô tả. Tách riêng khỏi
+          khung giá + 3 nút hành động bên dưới (không được lồng <button>
+          bên trong <a>/Link — sai chuẩn HTML). */}
+      <Link href={`/san-pham/${product.id}`} className="flex flex-col gap-2">
+        {image ? (
+          // eslint-disable-next-line @next/next/no-img-element -- user-uploaded data URLs/arbitrary URLs, not optimizable by next/image
+          <img
+            src={image}
+            alt={product.name}
+            className="w-full h-32 object-cover rounded-lg bg-amber-50"
+          />
+        ) : (
+          <span className="text-4xl">{product.emoji}</span>
+        )}
+        <h3 className="font-semibold text-gray-900 hover:underline">{product.name}</h3>
+        <p className="text-xs text-amber-700 bg-amber-50 rounded-full px-2 py-0.5 w-fit">
+          {product.category}
+        </p>
+        <p className="text-sm text-gray-500 flex-1">{product.desc}</p>
+      </Link>
       {reason && (
         <p className="text-sm text-gray-700 bg-gray-50 border border-gray-100 rounded-md px-3 py-2">
           🤖 {reason}
