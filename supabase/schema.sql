@@ -1,17 +1,21 @@
--- ShopAI (ecommerce-ai-search) — Supabase schema (v7: thêm trạng thái đơn
--- hàng "shipping" (Đơn đang giao) — Người bán bấm "Bắt đầu giao hàng" ở
--- trang /seller (processing -> shipping), Người mua tự xác nhận "Đã nhận
--- được hàng" ở trang /account khi đơn đang shipping (shipping -> completed).
--- Đơn chỉ huỷ được lúc còn "processing" (Đơn chờ xử lý), trước khi giao.
+-- ShopAI (ecommerce-ai-search) — Supabase schema (v8: cấu trúc lại Danh mục
+-- (Taxonomy) — thêm bảng `categories` (cây danh mục đa cấp, tự tham chiếu
+-- qua parent_id: Danh mục cha -> Loại sản phẩm -> ...), bảng
+-- `category_attributes` (khai báo thuộc tính có thể LỌC theo từng danh mục,
+-- phục vụ bộ lọc động mà KHÔNG cần đổi cấu trúc bảng products), cột
+-- `products.category_id` (liên kết sản phẩm với cây danh mục mới, giữ
+-- nguyên cột `products.category` cũ dạng text — KHÔNG xoá — để không phá dữ
+-- liệu/luồng cũ), và mở rộng `profiles.role` để có thêm vai trò 'admin'.
 --
--- Lịch sử: v6 cho phép 1 email vừa là tài khoản Người mua vừa là Người bán
--- (cột is_seller/active_role); v5 thêm cột attributes (thuộc tính sản
--- phẩm) + policy Người bán xem đơn hàng chứa sản phẩm của mình; v4 thêm
--- Supabase Auth thật + phân vai trò + số điện thoại/địa chỉ giao hàng +
--- bảng orders/order_items.
+-- Lịch sử: v7 thêm trạng thái đơn hàng "shipping" (Đơn đang giao); v6 cho
+-- phép 1 email vừa là tài khoản Người mua vừa là Người bán (cột
+-- is_seller/active_role); v5 thêm cột attributes (thuộc tính sản phẩm) +
+-- policy Người bán xem đơn hàng chứa sản phẩm của mình; v4 thêm Supabase
+-- Auth thật + phân vai trò + số điện thoại/địa chỉ giao hàng + bảng
+-- orders/order_items.
 --
--- File này AN TOÀN để chạy lại (idempotent). Nếu bạn đã chạy bản v1-v6 trước
--- đó, chỉ cần chạy lại TOÀN BỘ file v7 này thêm 1 lần — nó tự thêm
+-- File này AN TOÀN để chạy lại (idempotent). Nếu bạn đã chạy bản v1-v7 trước
+-- đó, chỉ cần chạy lại TOÀN BỘ file v8 này thêm 1 lần — nó tự thêm
 -- bảng/cột/policy mới, không xoá dữ liệu tài khoản/gian hàng/sản phẩm đã có.
 --
 -- Cách chạy: Supabase Dashboard > project của bạn > SQL Editor > New query
@@ -35,6 +39,14 @@ create table if not exists profiles (
   role text not null default 'buyer' check (role in ('buyer', 'seller')),
   created_at timestamptz not null default now()
 );
+
+-- v8: thêm vai trò 'admin' (quản trị danh mục/toàn hệ thống — xem Bước 3 ở
+-- lượt tiếp theo: Dashboard Admin + middleware RBAC). Ràng buộc check cũ chỉ
+-- cho 'buyer'/'seller' nên phải xoá và tạo lại để thêm 'admin', theo đúng
+-- cách đã làm với orders_status_check ở mục 8 bên dưới.
+alter table profiles drop constraint if exists profiles_role_check;
+alter table profiles add constraint profiles_role_check
+  check (role in ('buyer', 'seller', 'admin'));
 
 -- v3: thêm số điện thoại + địa chỉ giao hàng của khách (Người mua), dùng ở
 -- trang /checkout để hiển thị/lưu lại thông tin liên hệ khi đặt hàng.
@@ -113,6 +125,52 @@ create index if not exists shops_owner_email_idx on shops (owner_email);
 create index if not exists shops_owner_id_idx on shops (owner_id);
 
 -- ============================================================
+-- v8: bảng `categories` — CÂY DANH MỤC ĐA CẤP, tự tham chiếu qua parent_id
+-- (Danh mục cha -> Loại sản phẩm -> ... không giới hạn số cấp). Tạo TRƯỚC
+-- bảng products vì products.category_id (bên dưới) tham chiếu tới đây.
+-- Dữ liệu 11 danh mục cha + danh mục con cho ngành bánh (khớp với
+-- src/lib/products.js CATEGORIES cũ) được INSERT ở mục 9 cuối file, SAU khi
+-- bảng products đã tồn tại (để chạy được câu lệnh backfill category_id).
+-- ============================================================
+create table if not exists categories (
+  id uuid primary key default gen_random_uuid(),
+  -- slug: dùng làm URL SEO-friendly /danh-muc/[slug], vd "banh-sinh-nhat".
+  slug text not null unique,
+  name text not null,
+  -- parent_id null = danh mục cấp cao nhất (1 trong 11 danh mục cha).
+  parent_id uuid references categories (id) on delete cascade,
+  sort_order int not null default 0,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists categories_parent_id_idx on categories (parent_id);
+
+-- Thuộc tính CÓ THỂ LỌC theo từng danh mục (VD: danh mục "Bánh sinh nhật"
+-- có thể lọc theo "Trọng lượng"). Đây là bảng SIÊU DỮ LIỆU MÔ TẢ bộ lọc,
+-- HOÀN TOÀN TÁCH RỜI khỏi products.attributes (mảng {key, value} tự do đã
+-- có sẵn từ v5) — nhờ vậy thêm/bớt thuộc tính lọc cho 1 danh mục KHÔNG cần
+-- đổi cấu trúc bảng products hay bảng categories, đúng yêu cầu "bộ lọc động
+-- dựa trên Attributes mà không làm thay đổi cấu trúc Categories".
+create table if not exists category_attributes (
+  id uuid primary key default gen_random_uuid(),
+  category_id uuid not null references categories (id) on delete cascade,
+  -- key phải khớp với attr.key trong products.attributes (jsonb) thì bộ lọc
+  -- mới đối chiếu được — xem ProductQuickView/[id] page nhập attributes.
+  key text not null,
+  label text not null,
+  input_type text not null default 'text' check (input_type in ('text', 'number', 'select')),
+  -- Danh sách lựa chọn khi input_type = 'select' (vd: ["500g","1kg","1.5kg"]).
+  options text[],
+  sort_order int not null default 0,
+  created_at timestamptz not null default now(),
+  -- 1 danh mục không khai báo trùng 2 lần cùng 1 key thuộc tính lọc — cũng
+  -- là "conflict target" để câu lệnh seed bên dưới chạy lại được nhiều lần.
+  unique (category_id, key)
+);
+
+create index if not exists category_attributes_category_id_idx on category_attributes (category_id);
+
+-- ============================================================
 -- 3. Bảng sản phẩm (không đổi cấu trúc so với bản v1)
 -- ============================================================
 create table if not exists products (
@@ -134,6 +192,17 @@ create index if not exists products_shop_id_idx on products (shop_id);
 -- JSON các cặp { key, value } để linh hoạt, không cần đổi schema mỗi khi
 -- thêm loại thuộc tính mới.
 alter table products add column if not exists attributes jsonb not null default '[]';
+
+-- v8: category_id — liên kết sản phẩm với cây danh mục MỚI (bảng
+-- `categories`, xem mục 9 bên dưới). Cột `category` (text) cũ VẪN GIỮ
+-- NGUYÊN, không xoá, không đổi kiểu — tránh phá dữ liệu/luồng cũ (trang
+-- /products?category=... vẫn lọc theo cột text này). `category_id` là cột
+-- BỔ SUNG, dùng cho trang danh mục mới (/danh-muc/[slug]) và bộ lọc động.
+-- on delete set null: xoá 1 danh mục KHÔNG xoá sản phẩm, chỉ gỡ liên kết.
+alter table products add column if not exists category_id uuid
+  references categories (id) on delete set null;
+
+create index if not exists products_category_id_idx on products (category_id);
 
 -- ============================================================
 -- 4. Row Level Security — thay policy "công khai cho mọi thao tác ghi" ở
@@ -328,3 +397,112 @@ create policy "Sellers can update orders containing their products" on orders
       )
     )
   );
+
+-- ============================================================
+-- 9. v8 — RLS cho categories/category_attributes + seed dữ liệu 11 danh mục
+--    cha + danh mục con ngành bánh (khớp CATEGORIES cũ trong
+--    src/lib/products.js) + backfill products.category_id từ cột category
+--    (text) cũ. Chạy SAU section 3 (bảng products đã tồn tại).
+-- ============================================================
+alter table categories enable row level security;
+alter table category_attributes enable row level security;
+
+-- Đọc công khai — khách chưa đăng nhập vẫn xem được cây danh mục/bộ lọc
+-- trên web. CHƯA thêm policy insert/update/delete ở bản v8 này: Dashboard
+-- Admin + middleware RBAC (kiểm tra profiles.role = 'admin') sẽ làm ở lượt
+-- kế tiếp — hiện tại chỉ sửa được qua Supabase Dashboard > Table Editor
+-- (dùng service_role, không bị RLS chặn), CHƯA sửa được từ giao diện web.
+drop policy if exists "Public can read categories" on categories;
+create policy "Public can read categories" on categories
+  for select using (true);
+
+drop policy if exists "Public can read category attributes" on category_attributes;
+create policy "Public can read category attributes" on category_attributes
+  for select using (true);
+
+-- 11 danh mục cha (đúng thứ tự đề bài) — sort_order dùng để sắp xếp Sidebar.
+insert into categories (slug, name, parent_id, sort_order) values
+  ('thuc-pham-che-bien-do-uong', 'THỰC PHẨM ĐÃ CHẾ BIẾN & ĐỒ UỐNG', null, 1),
+  ('thuc-pham-tuoi-song-nguyen-lieu', 'THỰC PHẨM TƯƠI SỐNG & NGUYÊN LIỆU', null, 2),
+  ('thoi-trang-phu-kien', 'THỜI TRANG & PHỤ KIỆN', null, 3),
+  ('thiet-bi-dien-dien-tu', 'THIẾT BỊ ĐIỆN & ĐIỆN TỬ', null, 4),
+  ('my-pham-cham-soc-ca-nhan', 'MỸ PHẨM & CHĂM SÓC CÁ NHÂN', null, 5),
+  ('noi-that-van-phong-pham', 'NỘI THẤT & VĂN PHÒNG PHẨM', null, 6),
+  ('xay-dung-thiet-ke', 'XÂY DỰNG & THIẾT KẾ', null, 7),
+  ('dich-vu-sua-chua', 'DỊCH VỤ & SỬA CHỮA', null, 8),
+  ('du-lich-da-ngoai', 'DU LỊCH & DÃ NGOẠI', null, 9),
+  ('sach-do-dung-hoc-tap', 'SÁCH & ĐỒ DÙNG HỌC TẬP', null, 10),
+  ('nganh-hang-khac', 'NGÀNH HÀNG KHÁC', null, 11)
+on conflict (slug) do nothing;
+
+-- Danh mục con (Loại sản phẩm) cho "THỰC PHẨM ĐÃ CHẾ BIẾN & ĐỒ UỐNG" — dự án
+-- hiện tại là tiệm bánh, nên 8 danh mục bánh cũ (CATEGORIES trong
+-- src/lib/products.js) trở thành con của danh mục cha #1, GIỮ NGUYÊN tên
+-- cũ để câu lệnh backfill bên dưới khớp chính xác, không mất dữ liệu.
+insert into categories (slug, name, parent_id, sort_order)
+select v.slug, v.name, p.id, v.sort_order
+from (values
+  ('banh-sinh-nhat', 'Bánh sinh nhật', 1),
+  ('banh-kem', 'Bánh kem', 2),
+  ('cupcake', 'Cupcake', 3),
+  ('banh-mi-croissant', 'Bánh mì & Croissant', 4),
+  ('donut', 'Donut', 5),
+  ('banh-quy', 'Bánh quy', 6),
+  ('banh-trung-thu', 'Bánh Trung thu', 7),
+  ('banh-su-kem', 'Bánh su kem', 8)
+) as v(slug, name, sort_order)
+join categories p on p.slug = 'thuc-pham-che-bien-do-uong'
+on conflict (slug) do nothing;
+
+-- Ví dụ minh hoạ thêm 2 cấp con cho vài danh mục cha khác, để Sidebar không
+-- trống hoàn toàn ở 10 danh mục còn lại — chỉ mang tính GỢI Ý BAN ĐẦU, Admin
+-- sửa/xoá/thêm thoải mái sau (qua Table Editor hoặc Dashboard Admin ở lượt
+-- kế tiếp) mà không ảnh hưởng sản phẩm/danh mục đã có.
+insert into categories (slug, name, parent_id, sort_order)
+select v.slug, v.name, p.id, v.sort_order
+from (values
+  ('ao-nam', 'Áo nam', 1),
+  ('ao-nu', 'Áo nữ', 2),
+  ('giay-dep', 'Giày dép', 3),
+  ('tui-vi', 'Túi ví', 4)
+) as v(slug, name, sort_order)
+join categories p on p.slug = 'thoi-trang-phu-kien'
+on conflict (slug) do nothing;
+
+insert into categories (slug, name, parent_id, sort_order)
+select v.slug, v.name, p.id, v.sort_order
+from (values
+  ('dien-thoai-may-tinh-bang', 'Điện thoại & Máy tính bảng', 1),
+  ('laptop-may-tinh', 'Laptop & Máy tính', 2),
+  ('thiet-bi-gia-dung', 'Thiết bị gia dụng', 3),
+  ('phu-kien-dien-tu', 'Phụ kiện điện tử', 4)
+) as v(slug, name, sort_order)
+join categories p on p.slug = 'thiet-bi-dien-dien-tu'
+on conflict (slug) do nothing;
+
+-- Thuộc tính có thể LỌC cho danh mục "Bánh sinh nhật" (ví dụ minh hoạ) — key
+-- cần khớp với attr.key trong products.attributes (jsonb) đã nhập ở trang
+-- /seller/products/[id] thì bộ lọc động trên frontend mới đối chiếu được.
+insert into category_attributes (category_id, key, label, input_type, options, sort_order)
+select c.id, v.key, v.label, v.input_type, v.options, v.sort_order
+from (values
+  ('trong_luong', 'Trọng lượng', 'select', array['500g','1kg','1.5kg','2kg']::text[], 1),
+  ('xuat_xu', 'Xuất xứ', 'text', null::text[], 2)
+) as v(key, label, input_type, options, sort_order)
+join categories c on c.slug = 'banh-sinh-nhat'
+on conflict (category_id, key) do nothing;
+
+-- Backfill: gắn category_id cho sản phẩm ĐÃ CÓ TỪ TRƯỚC (đăng qua trang
+-- /seller/products/new, đang chỉ lưu category dạng text tự do) bằng cách
+-- khớp CHÍNH XÁC tên với danh mục con vừa tạo ở trên. Sản phẩm có category
+-- không khớp tên nào (vd người bán tự nhập danh mục khác) sẽ giữ
+-- category_id = null — vẫn hiển thị bình thường ở trang /products cũ (lọc
+-- theo cột category text), chỉ chưa xuất hiện ở trang /danh-muc/[slug] mới
+-- cho tới khi được gán lại danh mục (tính năng chọn category_id cho người
+-- bán/admin sẽ làm ở lượt Dashboard Admin kế tiếp).
+update products p
+set category_id = c.id
+from categories c
+where p.category_id is null
+  and c.parent_id is not null
+  and c.name = p.category;

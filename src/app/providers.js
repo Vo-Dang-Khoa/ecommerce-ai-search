@@ -333,6 +333,10 @@ function mapProduct(row) {
     shopId: row.shop_id,
     name: row.name,
     category: row.category,
+    // v8: liên kết tới cây danh mục mới (bảng categories) — null nếu sản
+    // phẩm đăng từ trước khi có tính năng này và chưa khớp được tên danh
+    // mục cũ (xem backfill trong supabase/schema.sql mục 9).
+    categoryId: row.category_id || null,
     price: Number(row.price),
     desc: row.description,
     images: row.images || [],
@@ -343,33 +347,88 @@ function mapProduct(row) {
   };
 }
 
+// v8: chuyển 1 dòng bảng `categories` (Supabase, snake_case) thành object
+// camelCase cho UI (Sidebar, trang /danh-muc/[slug]...) dùng.
+function mapCategory(row) {
+  return {
+    id: row.id,
+    slug: row.slug,
+    name: row.name,
+    parentId: row.parent_id,
+    sortOrder: row.sort_order,
+  };
+}
+
+// v8: thuộc tính CÓ THỂ LỌC khai báo cho từng danh mục (bảng
+// category_attributes) — khác với products.attributes (dữ liệu thuộc tính
+// THỰC TẾ của từng sản phẩm), đây chỉ là SIÊU DỮ LIỆU mô tả bộ lọc.
+function mapCategoryAttribute(row) {
+  return {
+    id: row.id,
+    categoryId: row.category_id,
+    key: row.key,
+    label: row.label,
+    inputType: row.input_type,
+    options: row.options || [],
+    sortOrder: row.sort_order,
+  };
+}
+
 function ShopProvider({ children }) {
   const { user } = useAuth();
   const [shops, setShops] = useState([]);
   const [sellerProducts, setSellerProducts] = useState([]);
+  // v8: cây danh mục (categories) + thuộc tính có thể lọc theo danh mục
+  // (category_attributes) — xem supabase/schema.sql mục 9.
+  const [categories, setCategories] = useState([]);
+  const [categoryAttributes, setCategoryAttributes] = useState([]);
   const [hydrated, setHydrated] = useState(false);
   const [loadError, setLoadError] = useState("");
 
-  // Tải toàn bộ shops + products (của mọi gian hàng) từ Supabase 1 lần khi
-  // app khởi động. Đây là bản demo đơn giản: mọi thay đổi (thêm/sửa/xoá)
-  // sẽ cập nhật lại state cục bộ ngay sau khi Supabase xác nhận thành công,
-  // KHÔNG dùng realtime subscription.
+  // Tải toàn bộ shops + products + categories + category_attributes từ
+  // Supabase 1 lần khi app khởi động. Đây là bản demo đơn giản: mọi thay
+  // đổi (thêm/sửa/xoá) sẽ cập nhật lại state cục bộ ngay sau khi Supabase
+  // xác nhận thành công, KHÔNG dùng realtime subscription.
   useEffect(() => {
     let cancelled = false;
 
     async function loadFromSupabase() {
       try {
-        const [shopsRes, productsRes] = await Promise.all([
+        const [shopsRes, productsRes, categoriesRes, categoryAttrsRes] = await Promise.all([
           supabase.from("shops").select("*").order("created_at", { ascending: true }),
           supabase.from("products").select("*").order("created_at", { ascending: true }),
+          supabase.from("categories").select("*").order("sort_order", { ascending: true }),
+          supabase
+            .from("category_attributes")
+            .select("*")
+            .order("sort_order", { ascending: true }),
         ]);
 
         if (shopsRes.error) throw shopsRes.error;
         if (productsRes.error) throw productsRes.error;
+        // categories/category_attributes: KHÔNG throw nếu lỗi (vd: project
+        // chưa chạy supabase/schema.sql bản v8 mới nhất, 2 bảng này chưa tồn
+        // tại) — chỉ cảnh báo, để app vẫn chạy được (Sidebar/bộ lọc danh mục
+        // mới chỉ đơn giản là rỗng) thay vì sập toàn bộ trang.
+        if (categoriesRes.error) {
+          console.warn(
+            "[ShopProvider] Không tải được bảng categories (có thể project chưa chạy " +
+              "supabase/schema.sql bản v8 mới nhất):",
+            categoriesRes.error
+          );
+        }
+        if (categoryAttrsRes.error) {
+          console.warn(
+            "[ShopProvider] Không tải được bảng category_attributes:",
+            categoryAttrsRes.error
+          );
+        }
         if (cancelled) return;
 
         setShops((shopsRes.data || []).map(mapShop));
         setSellerProducts((productsRes.data || []).map(mapProduct));
+        setCategories((categoriesRes.data || []).map(mapCategory));
+        setCategoryAttributes((categoryAttrsRes.data || []).map(mapCategoryAttribute));
       } catch (err) {
         if (!cancelled) {
           console.error("[ShopProvider] Không tải được dữ liệu từ Supabase:", err);
@@ -467,6 +526,10 @@ function ShopProvider({ children }) {
     const dbPatch = {};
     if (patch.name !== undefined) dbPatch.name = patch.name;
     if (patch.category !== undefined) dbPatch.category = patch.category;
+    // v8: cho phép gán category_id (cây danh mục mới) — chưa có UI chọn ở
+    // trang /seller/products/[id] (sẽ làm ở lượt Dashboard Admin/Seller kế
+    // tiếp), nhưng sẵn "đường ống" ghi xuống Supabase ngay từ bây giờ.
+    if (patch.categoryId !== undefined) dbPatch.category_id = patch.categoryId;
     if (patch.price !== undefined) dbPatch.price = patch.price;
     if (patch.desc !== undefined) dbPatch.description = patch.desc;
     if (patch.images !== undefined) dbPatch.images = patch.images;
@@ -535,8 +598,19 @@ function ShopProvider({ children }) {
     ? sellerProducts.filter((p) => p.shopId === myShop.id)
     : [];
 
-  // Sản phẩm demo tĩnh (src/lib/products.js) + sản phẩm thật từ Supabase
-  const allProducts = [...PRODUCTS, ...sellerProducts];
+  // Sản phẩm demo tĩnh (src/lib/products.js) KHÔNG có cột category_id (vì
+  // không phải dòng trong Supabase) — gán tạm categoryId bằng cách khớp
+  // CHÍNH XÁC tên với danh mục con đã seed sẵn (xem supabase/schema.sql mục
+  // 9, đã tạo danh mục con trùng tên 8 loại bánh cũ) để trang /danh-muc/
+  // [slug] mới vẫn hiển thị được các sản phẩm demo này, không cần sửa
+  // src/lib/products.js hay thêm cột DB cho dữ liệu tĩnh.
+  const staticProductsWithCategory = PRODUCTS.map((p) => ({
+    ...p,
+    categoryId: categories.find((c) => c.name === p.category)?.id ?? null,
+  }));
+
+  // Sản phẩm demo tĩnh (đã gán categoryId ở trên) + sản phẩm thật từ Supabase
+  const allProducts = [...staticProductsWithCategory, ...sellerProducts];
 
   return (
     <ShopContext.Provider
@@ -546,6 +620,8 @@ function ShopProvider({ children }) {
         myShop,
         myShopProducts,
         allProducts,
+        categories,
+        categoryAttributes,
         registerShop,
         updateShop,
         addProduct,

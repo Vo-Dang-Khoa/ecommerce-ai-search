@@ -66,6 +66,9 @@ export default function Header() {
             <Link href="/products" className="hover:text-gray-900">
               Sản phẩm
             </Link>
+            <Link href="/danh-muc" className="hover:text-gray-900">
+              Danh mục
+            </Link>
             <Link href="/loi-cam-on" className="hover:text-gray-900">
               Lời cảm ơn
             </Link>
@@ -180,6 +183,13 @@ export default function Header() {
               className="px-2 py-2.5 rounded-md hover:bg-gray-50 text-gray-700"
             >
               Sản phẩm
+            </Link>
+            <Link
+              href="/danh-muc"
+              onClick={closeMenu}
+              className="px-2 py-2.5 rounded-md hover:bg-gray-50 text-gray-700"
+            >
+              Danh mục
             </Link>
             <Link
               href="/loi-cam-on"
