@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useAuth, useShop } from "../../../providers";
 import { CATEGORIES } from "@/lib/products";
 import { uploadProductImage } from "@/lib/shops";
+import { moderateProductContent } from "@/lib/security";
 
 const MAX_IMAGE_BYTES = 1.5 * 1024 * 1024;
 
@@ -99,6 +100,27 @@ export default function NewProductPage() {
     }
     setError("");
     setSubmitting(true);
+
+    // Kiểm duyệt nội dung bằng AI TRƯỚC khi đăng bán công khai — chặn sản
+    // phẩm vi phạm (hàng cấm, dấu hiệu lừa đảo, spam...). Nếu dịch vụ AI
+    // lỗi/chưa cấu hình ANTHROPIC_API_KEY, moderateProductContent() tự FAIL
+    // OPEN (không chặn), để tính năng đăng sản phẩm cốt lõi không phụ
+    // thuộc vào việc AI có sẵn sàng hay không — xem src/lib/security.js.
+    const moderation = await moderateProductContent({
+      name: name.trim(),
+      category,
+      desc: desc.trim(),
+    });
+    if (!moderation.allowed) {
+      setError(
+        `Sản phẩm không được phép đăng bán: ${
+          moderation.reason || "vi phạm quy định của ShopAI"
+        }.`
+      );
+      setSubmitting(false);
+      return;
+    }
+
     try {
       const product = await addProduct({
         name: name.trim(),
@@ -250,7 +272,7 @@ export default function NewProductPage() {
             disabled={submitting || uploading}
             className="bg-gray-900 text-white py-2.5 rounded-md font-medium hover:bg-gray-800 transition-colors mt-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {submitting ? "Đang tạo..." : "Tạo sản phẩm"}
+            {submitting ? "Đang kiểm duyệt & tạo sản phẩm..." : "Tạo sản phẩm"}
           </button>
         </form>
       </div>

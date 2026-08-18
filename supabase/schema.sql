@@ -1,10 +1,12 @@
--- ShopAI (ecommerce-ai-search) — Supabase schema (v10: sắp xếp lại vị trí
--- danh mục cha "THUỐC & SỨC KHỎE" — nằm giữa "THỰC PHẨM TƯƠI SỐNG & NGUYÊN
--- LIỆU" và "THỜI TRANG & PHỤ KIỆN" trên Sidebar, xem mục 9 cuối file).
+-- ShopAI (ecommerce-ai-search) — Supabase schema (v11: thêm cột lưu vết
+-- kiểm duyệt nội dung sản phẩm bằng AI — products.moderation_status/
+-- moderation_reason, xem mục 3 gần cuối file + /api/moderate-product).
 --
--- Lịch sử: v9 thêm danh mục cha "THUỐC & SỨC KHỎE"; v8 cấu trúc lại Danh
--- mục (Taxonomy) — thêm bảng `categories` (cây danh mục đa cấp, tự tham
--- chiếu qua parent_id: Danh mục cha -> Loại sản phẩm -> ...), bảng
+-- Lịch sử: v10 sắp xếp lại vị trí danh mục cha "THUỐC & SỨC KHỎE" (giữa
+-- "THỰC PHẨM TƯƠI SỐNG & NGUYÊN LIỆU" và "THỜI TRANG & PHỤ KIỆN"); v9 thêm
+-- danh mục cha "THUỐC & SỨC KHỎE"; v8 cấu trúc lại Danh mục (Taxonomy) —
+-- thêm bảng `categories` (cây danh mục đa cấp, tự tham chiếu qua
+-- parent_id: Danh mục cha -> Loại sản phẩm -> ...), bảng
 -- `category_attributes` (khai báo thuộc tính có thể LỌC theo từng danh mục,
 -- phục vụ bộ lọc động mà KHÔNG cần đổi cấu trúc bảng products), cột
 -- `products.category_id` (liên kết sản phẩm với cây danh mục mới, giữ
@@ -16,8 +18,8 @@
 -- mình; v4 thêm Supabase Auth thật + phân vai trò + số điện thoại/địa chỉ
 -- giao hàng + bảng orders/order_items.
 --
--- File này AN TOÀN để chạy lại (idempotent). Nếu bạn đã chạy bản v1-v9 trước
--- đó, chỉ cần chạy lại TOÀN BỘ file v10 này thêm 1 lần — nó tự thêm/sửa
+-- File này AN TOÀN để chạy lại (idempotent). Nếu bạn đã chạy bản v1-v10 trước
+-- đó, chỉ cần chạy lại TOÀN BỘ file v11 này thêm 1 lần — nó tự thêm/sửa
 -- bảng/cột/policy/danh mục, không xoá dữ liệu tài khoản/gian hàng/sản
 -- phẩm/danh mục đã có.
 --
@@ -206,6 +208,17 @@ alter table products add column if not exists category_id uuid
   references categories (id) on delete set null;
 
 create index if not exists products_category_id_idx on products (category_id);
+
+-- v11: lưu vết kết quả kiểm duyệt nội dung bằng AI (xem
+-- /api/moderate-product + src/lib/security.js). Ở bản hiện tại, việc kiểm
+-- duyệt chạy ĐỒNG BỘ ngay lúc đăng sản phẩm (trang /seller/products/new) —
+-- sản phẩm bị AI từ chối sẽ KHÔNG được insert vào bảng này, nên mọi dòng
+-- hiện có đều mang moderation_status = 'approved'. 2 cột này là nền tảng
+-- sẵn cho luồng duyệt bất đồng bộ/hàng chờ Admin duyệt sau này (lượt kế
+-- tiếp), không ảnh hưởng gì tới dữ liệu/luồng đang chạy.
+alter table products add column if not exists moderation_status text not null default 'approved'
+  check (moderation_status in ('approved', 'rejected'));
+alter table products add column if not exists moderation_reason text not null default '';
 
 -- ============================================================
 -- 4. Row Level Security — thay policy "công khai cho mọi thao tác ghi" ở

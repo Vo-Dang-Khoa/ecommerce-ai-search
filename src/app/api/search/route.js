@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
 import { PRODUCTS } from "@/lib/products";
+import { checkRateLimit, getClientIp } from "@/lib/security";
 
 const MATCH_SCHEMA = {
   type: "object",
@@ -57,6 +58,29 @@ export async function POST(request) {
     return NextResponse.json(
       { error: "Vui lòng nhập mô tả sản phẩm bạn muốn tìm." },
       { status: 400 }
+    );
+  }
+
+  // Giới hạn độ dài đầu vào — chặn prompt quá dài (tốn phí gọi Anthropic,
+  // hoặc cố nhồi nhét nội dung để "lái" AI đi lệch khỏi vai trò tìm kiếm
+  // sản phẩm, kiểu tấn công prompt injection). 300 ký tự đủ rộng cho 1 câu
+  // mô tả tìm kiếm bình thường bằng tiếng Việt.
+  if (query.length > 300) {
+    return NextResponse.json(
+      { error: "Mô tả tìm kiếm quá dài (tối đa 300 ký tự)." },
+      { status: 400 }
+    );
+  }
+
+  // Giới hạn số lần gọi theo IP — chặn lạm dụng gọi AI liên tục (spam tốn
+  // phí Anthropic). Xem lưu ý về giới hạn của cách làm này (bộ nhớ trong
+  // process, không phân tán) trong src/lib/security.js.
+  const clientIp = getClientIp(request);
+  const rate = checkRateLimit(`search:${clientIp}`, { limit: 15, windowMs: 60_000 });
+  if (!rate.allowed) {
+    return NextResponse.json(
+      { error: "Bạn gửi yêu cầu tìm kiếm AI quá nhanh, vui lòng thử lại sau ít phút." },
+      { status: 429 }
     );
   }
 

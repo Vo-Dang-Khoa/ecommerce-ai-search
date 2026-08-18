@@ -343,6 +343,12 @@ function mapProduct(row) {
     promotion: row.promotion,
     // Thuộc tính sản phẩm (VD: Trọng lượng, Xuất xứ...), mảng { key, value }.
     attributes: row.attributes || [],
+    // v11: kết quả kiểm duyệt nội dung bằng AI lúc đăng bán (xem
+    // /api/moderate-product) — hiện luôn là 'approved' vì sản phẩm bị AI
+    // từ chối không được insert, cột này là nền tảng cho hàng chờ Admin
+    // duyệt ở lượt kế tiếp.
+    moderationStatus: row.moderation_status || "approved",
+    moderationReason: row.moderation_reason || "",
     createdAt: row.created_at,
   };
 }
