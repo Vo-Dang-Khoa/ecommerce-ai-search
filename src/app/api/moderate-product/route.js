@@ -2,9 +2,12 @@
 // bán đăng sản phẩm công khai (xem src/app/seller/products/new/page.js).
 // Cùng cách làm với /api/search: dùng output_config json_schema để buộc AI
 // trả về đúng cấu trúc {allowed, reason}, không cho trả lời tự do.
-import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenAI, ApiError } from "@google/genai";
 import { NextResponse } from "next/server";
 import { checkRateLimit, getClientIp } from "@/lib/security";
+
+// Model miễn phí (free tier, không cần thẻ) — xem chi tiết ở .env.local.example.
+const GEMINI_MODEL = "gemini-2.5-flash";
 
 const MODERATION_SCHEMA = {
   type: "object",
@@ -20,7 +23,6 @@ const MODERATION_SCHEMA = {
     },
   },
   required: ["allowed", "reason"],
-  additionalProperties: false,
 };
 
 function buildPrompt({ name, category, desc }) {
@@ -74,28 +76,26 @@ export async function POST(request) {
     );
   }
 
-  if (!process.env.ANTHROPIC_API_KEY) {
+  if (!process.env.GEMINI_API_KEY) {
     return NextResponse.json(
-      { error: "Chưa cấu hình ANTHROPIC_API_KEY." },
+      { error: "Chưa cấu hình GEMINI_API_KEY." },
       { status: 500 }
     );
   }
 
-  const client = new Anthropic();
+  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
   try {
-    const response = await client.messages.create({
-      model: "claude-opus-5",
-      max_tokens: 512,
-      output_config: {
-        format: { type: "json_schema", schema: MODERATION_SCHEMA },
-        effort: "low",
+    const response = await ai.models.generateContent({
+      model: GEMINI_MODEL,
+      contents: buildPrompt({ name, category, desc }),
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: MODERATION_SCHEMA,
       },
-      messages: [{ role: "user", content: buildPrompt({ name, category, desc }) }],
     });
 
-    const textBlock = response.content.find((b) => b.type === "text");
-    const parsed = JSON.parse(textBlock?.text ?? '{"allowed":true,"reason":""}');
+    const parsed = JSON.parse(response.text ?? '{"allowed":true,"reason":""}');
 
     return NextResponse.json({
       allowed: parsed.allowed !== false,
@@ -105,19 +105,20 @@ export async function POST(request) {
     // Lỗi gọi AI (hết hạn key, quá tải, mất mạng...) -> trả lỗi rõ ràng để
     // moderateProductContent() (src/lib/security.js) tự FAIL OPEN, không
     // để sự cố của dịch vụ AI chặn luôn tính năng đăng sản phẩm cốt lõi.
-    if (error instanceof Anthropic.AuthenticationError) {
-      return NextResponse.json(
-        { error: "ANTHROPIC_API_KEY không hợp lệ hoặc đã hết hạn." },
-        { status: 401 }
-      );
-    }
-    if (error instanceof Anthropic.RateLimitError) {
-      return NextResponse.json(
-        { error: "Đã vượt giới hạn gọi AI, vui lòng thử lại sau." },
-        { status: 429 }
-      );
-    }
-    if (error instanceof Anthropic.APIConnectionError) {
+    if (error instanceof ApiError) {
+      const status = error.status;
+      if (status === 401 || status === 403) {
+        return NextResponse.json(
+          { error: "GEMINI_API_KEY không hợp lệ hoặc chưa được cấp quyền." },
+          { status: 401 }
+        );
+      }
+      if (status === 429) {
+        return NextResponse.json(
+          { error: "Đã vượt giới hạn miễn phí của Gemini, vui lòng thử lại sau." },
+          { status: 429 }
+        );
+      }
       return NextResponse.json(
         { error: "Không thể kết nối tới dịch vụ AI." },
         { status: 502 }

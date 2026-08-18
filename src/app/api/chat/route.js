@@ -3,35 +3,42 @@
 //  2. Trả lời chính sách + tra cứu đơn hàng THẬT của khách đang đăng nhập.
 //
 // Điểm khác với /api/search: đây là hội thoại nhiều lượt (phải nhận + gửi
-// lại toàn bộ lịch sử mỗi lần gọi, vì Claude API không tự nhớ giữa các lần
-// gọi), và dùng "tool use" (function calling) để AI có thể YÊU CẦU server
-// tra cứu dữ liệu thật (đơn hàng) thay vì tự bịa ra câu trả lời.
-import Anthropic from "@anthropic-ai/sdk";
+// lại toàn bộ lịch sử mỗi lần gọi, vì Gemini API không tự nhớ giữa các lần
+// gọi), và dùng "function calling" để AI có thể YÊU CẦU server tra cứu dữ
+// liệu thật (đơn hàng) thay vì tự bịa ra câu trả lời.
+import { GoogleGenAI, ApiError } from "@google/genai";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { PRODUCTS } from "@/lib/products";
 import { PAYMENT_METHODS, SHIPPING_METHODS } from "@/lib/orderOptions";
 import { checkRateLimit, getClientIp } from "@/lib/security";
 
+// Model miễn phí (free tier, không cần thẻ) — xem chi tiết ở .env.local.example.
+const GEMINI_MODEL = "gemini-2.5-flash";
+
 const MAX_HISTORY_MESSAGES = 12;
 const MAX_MESSAGE_LENGTH = 500;
 
 const TOOLS = [
   {
-    name: "lookup_recent_orders",
-    description:
-      "Tra cứu các đơn hàng GẦN ĐÂY của khách hàng đang trò chuyện (chỉ xem được đơn của " +
-      "chính họ, KHÔNG xem được của người khác). Dùng khi khách hỏi về đơn hàng đã đặt, " +
-      "trạng thái giao hàng, lịch sử mua hàng.",
-    input_schema: {
-      type: "object",
-      properties: {
-        limit: {
-          type: "number",
-          description: "Số đơn hàng gần nhất cần lấy (mặc định 5, tối đa 10)",
+    functionDeclarations: [
+      {
+        name: "lookup_recent_orders",
+        description:
+          "Tra cứu các đơn hàng GẦN ĐÂY của khách hàng đang trò chuyện (chỉ xem được đơn của " +
+          "chính họ, KHÔNG xem được của người khác). Dùng khi khách hỏi về đơn hàng đã đặt, " +
+          "trạng thái giao hàng, lịch sử mua hàng.",
+        parametersJsonSchema: {
+          type: "object",
+          properties: {
+            limit: {
+              type: "number",
+              description: "Số đơn hàng gần nhất cần lấy (mặc định 5, tối đa 10)",
+            },
+          },
         },
       },
-    },
+    ],
   },
 ];
 
@@ -76,6 +83,27 @@ async function runLookupRecentOrders(scopedClient, args) {
   };
 }
 
+// Nếu vòng gọi AI thứ 2 (gửi kết quả tool về để AI soạn câu trả lời cuối)
+// gặp sự cố vì bất kỳ lý do gì, vẫn trả lời khách bằng DỮ LIỆU THẬT đã tra
+// được — không để lỗi kỹ thuật biến thành "im lặng"/báo lỗi cho khách.
+function summarizeOrdersAsText(toolResult) {
+  if (!toolResult.orders || toolResult.orders.length === 0) {
+    return (
+      toolResult.note ||
+      "Bạn chưa có đơn hàng nào, hoặc chưa đăng nhập — hãy đăng nhập rồi hỏi lại nhé."
+    );
+  }
+  const lines = toolResult.orders.map(
+    (o) =>
+      `- Đơn #${String(o.id).slice(0, 8)}: trạng thái "${o.status}", tổng ${Number(
+        o.total
+      ).toLocaleString("vi-VN")}đ, đặt ngày ${new Date(o.created_at).toLocaleDateString(
+        "vi-VN"
+      )}`
+  );
+  return `Đây là các đơn hàng gần đây của bạn:\n${lines.join("\n")}`;
+}
+
 function buildCatalogText() {
   return PRODUCTS.map(
     (p) =>
@@ -114,6 +142,15 @@ nhập (nút "Đăng nhập" góc phải trang) rồi hỏi lại, đừng bịa
 lời về chủ đề ngoài phạm vi ShopAI (sản phẩm bánh, đơn hàng, chính sách cửa hàng).`;
 }
 
+// Gemini API chỉ dùng 2 role trong "contents": "user" và "model" (khác
+// Anthropic dùng "assistant") — đổi role tin nhắn cũ sang đúng quy ước.
+function toGeminiContents(messages) {
+  return messages.map((m) => ({
+    role: m.role === "assistant" ? "model" : "user",
+    parts: [{ text: m.content }],
+  }));
+}
+
 export async function POST(request) {
   let body;
   try {
@@ -126,7 +163,7 @@ export async function POST(request) {
   const accessToken = typeof body?.accessToken === "string" ? body.accessToken : null;
 
   // Chuẩn hoá + giới hạn lịch sử hội thoại gửi lên — chặn lạm dụng (gửi
-  // lịch sử khổng lồ để tốn phí Anthropic), loại tin nhắn rỗng/vai trò lạ.
+  // lịch sử khổng lồ để tốn quota Gemini), loại tin nhắn rỗng/vai trò lạ.
   const messages = rawMessages
     .filter(
       (m) =>
@@ -150,80 +187,80 @@ export async function POST(request) {
     );
   }
 
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return NextResponse.json({ error: "Chưa cấu hình ANTHROPIC_API_KEY." }, { status: 500 });
+  if (!process.env.GEMINI_API_KEY) {
+    return NextResponse.json({ error: "Chưa cấu hình GEMINI_API_KEY." }, { status: 500 });
   }
 
-  const client = new Anthropic();
+  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
   const scopedSupabase = createScopedSupabaseClient(accessToken);
-  const system = buildSystemPrompt();
+  const systemInstruction = buildSystemPrompt();
+  const contents = toGeminiContents(messages);
 
   try {
-    let response = await client.messages.create({
-      model: "claude-opus-5",
-      max_tokens: 1024,
-      system,
-      tools: TOOLS,
-      messages,
+    const response = await ai.models.generateContent({
+      model: GEMINI_MODEL,
+      contents,
+      config: { systemInstruction, tools: TOOLS },
     });
 
+    const functionCall = response.functionCalls?.[0];
+
     // AI muốn gọi công cụ (tra cứu đơn hàng) -> server THỰC SỰ chạy công cụ
-    // đó (qua scoped client ở trên, chỉ thấy đơn của đúng khách đang chat),
-    // gửi kết quả THẬT về lại cho AI để nó soạn câu trả lời cuối cùng.
-    if (response.stop_reason === "tool_use") {
-      const toolUseBlock = response.content.find((b) => b.type === "tool_use");
-      let toolResult = { error: "Công cụ không xác định." };
+    // đó (qua scoped client ở trên, chỉ thấy đơn của đúng khách đang chat).
+    if (functionCall?.name === "lookup_recent_orders") {
+      const toolResult = await runLookupRecentOrders(scopedSupabase, functionCall.args);
 
-      if (toolUseBlock?.name === "lookup_recent_orders") {
-        toolResult = await runLookupRecentOrders(scopedSupabase, toolUseBlock.input);
+      try {
+        // Gửi kết quả THẬT về lại cho AI để nó soạn câu trả lời cuối cùng
+        // bằng ngôn ngữ tự nhiên.
+        const followUp = await ai.models.generateContent({
+          model: GEMINI_MODEL,
+          contents: [
+            ...contents,
+            {
+              role: "model",
+              parts: [
+                { functionCall: { name: "lookup_recent_orders", args: functionCall.args || {} } },
+              ],
+            },
+            {
+              role: "user",
+              parts: [
+                { functionResponse: { name: "lookup_recent_orders", response: toolResult } },
+              ],
+            },
+          ],
+          config: { systemInstruction, tools: TOOLS },
+        });
+
+        const reply = followUp.text?.trim() || summarizeOrdersAsText(toolResult);
+        return NextResponse.json({ reply });
+      } catch {
+        // Vòng gọi thứ 2 lỗi (vd sự cố tạm thời) -> vẫn trả lời khách bằng
+        // dữ liệu đơn hàng THẬT đã tra được, không để khách nhận lỗi trống.
+        return NextResponse.json({ reply: summarizeOrdersAsText(toolResult) });
       }
-
-      response = await client.messages.create({
-        model: "claude-opus-5",
-        max_tokens: 1024,
-        system,
-        tools: TOOLS,
-        messages: [
-          ...messages,
-          { role: "assistant", content: response.content },
-          {
-            role: "user",
-            content: [
-              {
-                type: "tool_result",
-                tool_use_id: toolUseBlock.id,
-                content: JSON.stringify(toolResult),
-              },
-            ],
-          },
-        ],
-      });
     }
 
-    const textBlock = response.content.find((b) => b.type === "text");
-    const reply = textBlock?.text?.trim() || "Xin lỗi, mình chưa trả lời được câu này.";
-
+    const reply = response.text?.trim() || "Xin lỗi, mình chưa trả lời được câu này.";
     return NextResponse.json({ reply });
   } catch (error) {
-    if (error instanceof Anthropic.AuthenticationError) {
-      return NextResponse.json(
-        { error: "ANTHROPIC_API_KEY không hợp lệ hoặc đã hết hạn." },
-        { status: 401 }
-      );
-    }
-    if (error instanceof Anthropic.RateLimitError) {
-      return NextResponse.json(
-        { error: "Đã vượt giới hạn gọi AI, vui lòng thử lại sau ít phút." },
-        { status: 429 }
-      );
-    }
-    if (error instanceof Anthropic.APIConnectionError) {
-      return NextResponse.json(
-        { error: "Không thể kết nối tới dịch vụ AI." },
-        { status: 502 }
-      );
-    }
-    if (error instanceof Anthropic.APIError) {
+    // SDK Gemini gom lỗi API vào 1 class ApiError duy nhất (khác Anthropic có
+    // nhiều class riêng) — phân biệt loại lỗi qua error.status (mã HTTP).
+    if (error instanceof ApiError) {
+      const status = error.status;
+      if (status === 401 || status === 403) {
+        return NextResponse.json(
+          { error: "GEMINI_API_KEY không hợp lệ hoặc chưa được cấp quyền." },
+          { status: 401 }
+        );
+      }
+      if (status === 429) {
+        return NextResponse.json(
+          { error: "Đã vượt giới hạn miễn phí của Gemini, vui lòng thử lại sau ít phút." },
+          { status: 429 }
+        );
+      }
       return NextResponse.json(
         { error: "Dịch vụ AI đang gặp sự cố, vui lòng thử lại." },
         { status: 502 }
