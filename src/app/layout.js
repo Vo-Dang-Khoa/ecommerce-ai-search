@@ -1,5 +1,6 @@
 import { Geist, Geist_Mono } from "next/font/google";
 import Header from "./components/Header";
+import ChatWidget from "./components/ChatWidget";
 import { Providers } from "./providers";
 import "./globals.css";
 
@@ -28,6 +29,7 @@ export default function RootLayout({ children }) {
         <Providers>
           <Header />
           {children}
+          <ChatWidget />
         </Providers>
       </body>
     </html>
