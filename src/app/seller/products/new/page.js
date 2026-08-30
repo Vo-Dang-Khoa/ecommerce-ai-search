@@ -5,10 +5,15 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useAuth, useShop } from "../../../providers";
 import { CATEGORIES } from "@/lib/products";
-import { uploadProductImage } from "@/lib/shops";
+import {
+  uploadProductImage,
+  resizeImageFile,
+  uploadProductVideo,
+  validateProductVideo,
+  VIDEO_MAX_SECONDS,
+  VIDEO_MAX_BYTES,
+} from "@/lib/shops";
 import { moderateProductContent } from "@/lib/security";
-
-const MAX_IMAGE_BYTES = 1.5 * 1024 * 1024;
 
 export default function NewProductPage() {
   const router = useRouter();
@@ -23,6 +28,9 @@ export default function NewProductPage() {
   const [imageUrl, setImageUrl] = useState("");
   const [urlError, setUrlError] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [videoUrl, setVideoUrl] = useState("");
+  const [videoUploading, setVideoUploading] = useState(false);
+  const [videoError, setVideoError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -48,18 +56,18 @@ export default function NewProductPage() {
   async function handleFiles(e) {
     const files = Array.from(e.target.files || []);
     e.target.value = "";
-    const oversized = files.find((f) => f.size > MAX_IMAGE_BYTES);
-    if (oversized) {
-      setError(`Ảnh "${oversized.name}" vượt quá 1.5MB, vui lòng chọn ảnh nhỏ hơn.`);
-      return;
-    }
+    if (files.length === 0) return;
+
     setError("");
     setUploading(true);
     try {
-      // Upload tuần tự để giữ đúng thứ tự ảnh người dùng chọn
+      // Upload tuần tự để giữ đúng thứ tự ảnh người dùng chọn. Ảnh vượt quá
+      // kích thước/dung lượng khuyến nghị sẽ được TỰ ĐỘNG thu nhỏ trước khi
+      // tải lên (resizeImageFile) — không còn từ chối thẳng như trước.
       const urls = [];
       for (const file of files) {
-        const url = await uploadProductImage(file, myShop.id);
+        const resized = await resizeImageFile(file);
+        const url = await uploadProductImage(resized, myShop.id);
         urls.push(url);
       }
       setImages((prev) => [...prev, ...urls]);
@@ -68,6 +76,42 @@ export default function NewProductPage() {
     } finally {
       setUploading(false);
     }
+  }
+
+  async function handleVideoChange(e) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+
+    setVideoError("");
+    if (!file.type.startsWith("video/")) {
+      setVideoError("Vui lòng chọn 1 tệp video.");
+      return;
+    }
+
+    setVideoUploading(true);
+    try {
+      // Kiểm tra thời lượng/dung lượng TRƯỚC khi tải lên — nếu vượt giới
+      // hạn, báo lỗi kèm hướng dẫn cụ thể để người bán tự cắt/nén, không
+      // tự động tải video quá khổ lên Supabase.
+      const validationError = await validateProductVideo(file);
+      if (validationError) {
+        setVideoError(validationError);
+        return;
+      }
+
+      const url = await uploadProductVideo(file, myShop.id);
+      setVideoUrl(url);
+    } catch (err) {
+      setVideoError(err.message || "Tải video lên Supabase thất bại.");
+    } finally {
+      setVideoUploading(false);
+    }
+  }
+
+  function handleRemoveVideo() {
+    setVideoUrl("");
+    setVideoError("");
   }
 
   function handleAddImageUrl() {
@@ -103,7 +147,7 @@ export default function NewProductPage() {
 
     // Kiểm duyệt nội dung bằng AI TRƯỚC khi đăng bán công khai — chặn sản
     // phẩm vi phạm (hàng cấm, dấu hiệu lừa đảo, spam...). Nếu dịch vụ AI
-    // lỗi/chưa cấu hình ANTHROPIC_API_KEY, moderateProductContent() tự FAIL
+    // lỗi/chưa cấu hình GEMINI_API_KEY, moderateProductContent() tự FAIL
     // OPEN (không chặn), để tính năng đăng sản phẩm cốt lõi không phụ
     // thuộc vào việc AI có sẵn sàng hay không — xem src/lib/security.js.
     const moderation = await moderateProductContent({
@@ -128,6 +172,7 @@ export default function NewProductPage() {
         price: priceValue,
         desc: desc.trim(),
         images,
+        videoUrl: videoUrl || null,
       });
       router.push(`/seller/products/${product.id}`);
     } catch (err) {
@@ -147,7 +192,7 @@ export default function NewProductPage() {
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Bánh quy Oreo"
+              placeholder="Ví dụ: Bánh quy Oreo, Áo nam, ..."
               className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-gray-900"
             />
           </div>
@@ -237,7 +282,9 @@ export default function NewProductPage() {
               />
             </label>
             <p className="text-xs text-gray-400 mt-1.5 mb-3">
-              Chọn 1 hoặc nhiều ảnh từ máy (tối đa 1.5MB/ảnh) — ảnh sẽ tự động tải lên.
+              Chọn 1 hoặc nhiều ảnh từ máy — ảnh sẽ tự động tải lên. Ảnh quá lớn (trên 1600px
+              hoặc trên 1.5MB) sẽ được tự động thu nhỏ vừa đủ để hiển thị rõ nét trên trang bán
+              hàng, không cần bạn tự chỉnh sửa trước.
             </p>
 
             {/* Cách khác: dán sẵn URL ảnh có trên mạng thay vì tải file —
@@ -263,6 +310,61 @@ export default function NewProductPage() {
               </button>
             </div>
             {urlError && <p className="text-xs text-red-600 mt-1.5">{urlError}</p>}
+          </div>
+
+          <div>
+            <label className="block text-sm text-gray-700 mb-2">
+              Video giới thiệu sản phẩm <span className="text-gray-400">(không bắt buộc)</span>
+            </label>
+
+            {videoUrl && (
+              <div className="mb-3">
+                <video
+                  src={videoUrl}
+                  controls
+                  className="w-full max-w-xs rounded-md border border-gray-200"
+                />
+                <button
+                  type="button"
+                  onClick={handleRemoveVideo}
+                  className="block mt-1.5 text-xs text-red-600 hover:underline"
+                >
+                  ✕ Xoá video
+                </button>
+              </div>
+            )}
+
+            {!videoUrl && (
+              <>
+                {/* Nút chọn video TỪ MÁY để tải lên Supabase Storage (bucket
+                    "product-videos") — kiểm tra thời lượng/dung lượng ở
+                    trình duyệt TRƯỚC khi tải lên (validateProductVideo),
+                    báo lỗi kèm hướng dẫn cụ thể nếu vượt giới hạn thay vì
+                    tự động nén (xem ghi chú trong src/lib/shops.js). */}
+                <label
+                  className={`inline-flex items-center gap-2 text-sm px-4 py-2 rounded-md transition-colors ${
+                    videoUploading
+                      ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                      : "bg-gray-900 text-white hover:bg-gray-800 cursor-pointer"
+                  }`}
+                >
+                  {videoUploading ? "Đang tải video lên..." : "Tải video lên"}
+                  <input
+                    type="file"
+                    accept="video/*"
+                    onChange={handleVideoChange}
+                    disabled={videoUploading}
+                    className="hidden"
+                  />
+                </label>
+                <p className="text-xs text-gray-400 mt-1.5">
+                  Chọn 1 video ngắn giới thiệu sản phẩm (tối đa {VIDEO_MAX_SECONDS} giây, tối đa{" "}
+                  {VIDEO_MAX_BYTES / (1024 * 1024)}MB). Nếu video dài hoặc nặng hơn giới hạn, hệ
+                  thống sẽ báo lỗi kèm hướng dẫn cắt/nén video, không tự động tải lên.
+                </p>
+              </>
+            )}
+            {videoError && <p className="text-xs text-red-600 mt-1.5">{videoError}</p>}
           </div>
 
           {error && <p className="text-sm text-red-600">{error}</p>}

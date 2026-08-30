@@ -17,3 +17,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 // Tên bucket lưu ảnh sản phẩm trong Supabase Storage.
 // Phải trùng với id bucket được tạo trong supabase/schema.sql.
 export const PRODUCT_IMAGES_BUCKET = "product-images";
+
+// v12: tên bucket lưu video giới thiệu sản phẩm — phải trùng với id bucket
+// "product-videos" được tạo trong supabase/schema.sql (mục 5B).
+export const PRODUCT_VIDEOS_BUCKET = "product-videos";

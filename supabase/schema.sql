@@ -1,8 +1,11 @@
--- ShopAI (ecommerce-ai-search) — Supabase schema (v11: thêm cột lưu vết
--- kiểm duyệt nội dung sản phẩm bằng AI — products.moderation_status/
--- moderation_reason, xem mục 3 gần cuối file + /api/moderate-product).
+-- ShopAI (ecommerce-ai-search) — Supabase schema (v12: thêm cột
+-- products.video_url + bucket Storage "product-videos", cho phép người bán
+-- đính kèm 1 video giới thiệu sản phẩm — xem mục 3 và mục 5B).
 --
--- Lịch sử: v10 sắp xếp lại vị trí danh mục cha "THUỐC & SỨC KHỎE" (giữa
+-- Lịch sử: v11 thêm cột lưu vết kiểm duyệt nội dung sản phẩm bằng AI —
+-- products.moderation_status/moderation_reason (xem mục 3 gần cuối file +
+-- /api/moderate-product); v10 sắp xếp lại vị trí danh mục cha "THUỐC & SỨC
+-- KHỎE" (giữa
 -- "THỰC PHẨM TƯƠI SỐNG & NGUYÊN LIỆU" và "THỜI TRANG & PHỤ KIỆN"); v9 thêm
 -- danh mục cha "THUỐC & SỨC KHỎE"; v8 cấu trúc lại Danh mục (Taxonomy) —
 -- thêm bảng `categories` (cây danh mục đa cấp, tự tham chiếu qua
@@ -18,8 +21,8 @@
 -- mình; v4 thêm Supabase Auth thật + phân vai trò + số điện thoại/địa chỉ
 -- giao hàng + bảng orders/order_items.
 --
--- File này AN TOÀN để chạy lại (idempotent). Nếu bạn đã chạy bản v1-v10 trước
--- đó, chỉ cần chạy lại TOÀN BỘ file v11 này thêm 1 lần — nó tự thêm/sửa
+-- File này AN TOÀN để chạy lại (idempotent). Nếu bạn đã chạy bản v1-v11 trước
+-- đó, chỉ cần chạy lại TOÀN BỘ file v12 này thêm 1 lần — nó tự thêm/sửa
 -- bảng/cột/policy/danh mục, không xoá dữ liệu tài khoản/gian hàng/sản
 -- phẩm/danh mục đã có.
 --
@@ -220,6 +223,12 @@ alter table products add column if not exists moderation_status text not null de
   check (moderation_status in ('approved', 'rejected'));
 alter table products add column if not exists moderation_reason text not null default '';
 
+-- v12: video giới thiệu sản phẩm (tuỳ chọn) — lưu URL công khai từ bucket
+-- Storage "product-videos" (xem mục 5B). Giới hạn thời lượng/dung lượng
+-- video được kiểm tra ở phía trình duyệt (trang /seller/products/new)
+-- TRƯỚC khi tải lên, không kiểm tra lại ở đây.
+alter table products add column if not exists video_url text;
+
 -- ============================================================
 -- 4. Row Level Security — thay policy "công khai cho mọi thao tác ghi" ở
 --    bản v1 bằng policy dựa trên auth.uid() thật, vì giờ đã có Supabase Auth.
@@ -295,6 +304,35 @@ drop policy if exists "Public can delete product images" on storage.objects;
 drop policy if exists "Authenticated can delete product images" on storage.objects;
 create policy "Authenticated can delete product images" on storage.objects
   for delete to authenticated using (bucket_id = 'product-images');
+
+-- ============================================================
+-- 5B (v12). Storage bucket lưu VIDEO sản phẩm — cùng cách phân quyền với
+--    bucket ảnh ở mục 5 (public đọc, chỉ người đã đăng nhập được ghi).
+--    file_size_limit đặt 25MB — hơi rộng hơn giới hạn 20MB kiểm tra ở
+--    trình duyệt (trang /seller/products/new), phòng trường hợp trình
+--    duyệt tính sai lệch dung lượng; đây là lớp chặn AN TOÀN Ở SERVER,
+--    không phải giới hạn chính (giới hạn chính vẫn là kiểm tra phía
+--    trình duyệt để báo lỗi rõ ràng, thân thiện cho người bán).
+-- ============================================================
+insert into storage.buckets (id, name, public, file_size_limit)
+values ('product-videos', 'product-videos', true, 26214400)
+on conflict (id) do update set file_size_limit = excluded.file_size_limit;
+
+drop policy if exists "Public can read product videos" on storage.objects;
+create policy "Public can read product videos" on storage.objects
+  for select using (bucket_id = 'product-videos');
+
+drop policy if exists "Authenticated can upload product videos" on storage.objects;
+create policy "Authenticated can upload product videos" on storage.objects
+  for insert to authenticated with check (bucket_id = 'product-videos');
+
+drop policy if exists "Authenticated can update product videos" on storage.objects;
+create policy "Authenticated can update product videos" on storage.objects
+  for update to authenticated using (bucket_id = 'product-videos');
+
+drop policy if exists "Authenticated can delete product videos" on storage.objects;
+create policy "Authenticated can delete product videos" on storage.objects
+  for delete to authenticated using (bucket_id = 'product-videos');
 
 -- ============================================================
 -- 6. Đơn hàng — tạo ra khi Người mua bấm "Xác nhận đặt hàng" ở /checkout,

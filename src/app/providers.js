@@ -340,6 +340,9 @@ function mapProduct(row) {
     price: Number(row.price),
     desc: row.description,
     images: row.images || [],
+    // v12: video giới thiệu sản phẩm (tuỳ chọn) — URL công khai từ bucket
+    // Storage "product-videos", null nếu người bán không đính kèm video.
+    videoUrl: row.video_url || null,
     promotion: row.promotion,
     // Thuộc tính sản phẩm (VD: Trọng lượng, Xuất xứ...), mảng { key, value }.
     attributes: row.attributes || [],
@@ -494,7 +497,7 @@ function ShopProvider({ children }) {
     setShops((prev) => prev.map((s) => (s.id === myShop.id ? { ...s, ...patch } : s)));
   }
 
-  async function addProduct({ name, category, price, desc, images = [] }) {
+  async function addProduct({ name, category, price, desc, images = [], videoUrl = null }) {
     if (!myShop) throw new Error("Bạn cần đăng ký gian hàng trước.");
     const { data, error } = await supabase
       .from("products")
@@ -505,6 +508,7 @@ function ShopProvider({ children }) {
         price: Math.max(0, Math.round(Number(price) || 0)),
         description: desc || "",
         images,
+        video_url: videoUrl || null,
         promotion: null,
       })
       .select()
@@ -539,6 +543,7 @@ function ShopProvider({ children }) {
     if (patch.price !== undefined) dbPatch.price = patch.price;
     if (patch.desc !== undefined) dbPatch.description = patch.desc;
     if (patch.images !== undefined) dbPatch.images = patch.images;
+    if (patch.videoUrl !== undefined) dbPatch.video_url = patch.videoUrl;
     if (patch.promotion !== undefined) dbPatch.promotion = patch.promotion;
     if (patch.attributes !== undefined) dbPatch.attributes = patch.attributes;
 
