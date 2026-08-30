@@ -544,7 +544,20 @@ function ShopProvider({ children }) {
     setShops((prev) => prev.map((s) => (s.id === myShop.id ? { ...s, ...patch } : s)));
   }
 
-  async function addProduct({ name, category, price, desc, images = [], videoUrl = null }) {
+  // v14: nhận thêm categoryId (danh mục con đã chọn theo cây danh mục 12
+  // ngành hàng ở trang /seller/products/new — xem CategoryPicker trong file
+  // đó) để gắn category_id NGAY LÚC ĐĂNG SẢN PHẨM, thay vì phải backfill
+  // thủ công như các sản phẩm cũ (xem supabase/schema.sql mục 9). `category`
+  // (text) vẫn được giữ để tương thích trang /products cũ.
+  async function addProduct({
+    name,
+    category,
+    categoryId = null,
+    price,
+    desc,
+    images = [],
+    videoUrl = null,
+  }) {
     if (!myShop) throw new Error("Bạn cần đăng ký gian hàng trước.");
     const { data, error } = await supabase
       .from("products")
@@ -552,6 +565,7 @@ function ShopProvider({ children }) {
         shop_id: myShop.id,
         name,
         category,
+        category_id: categoryId,
         price: Math.max(0, Math.round(Number(price) || 0)),
         description: desc || "",
         images,

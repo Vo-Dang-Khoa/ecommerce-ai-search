@@ -18,14 +18,23 @@ import { moderateProductContent } from "@/lib/security";
 import CapturePhotoButton from "./CapturePhotoButton";
 import RecordVideoButton from "./RecordVideoButton";
 import VideoTrimModal from "./VideoTrimModal";
+import CategoryPicker from "../../../components/CategoryPicker";
 
 export default function NewProductPage() {
   const router = useRouter();
   const { user, hydrated: authHydrated } = useAuth();
-  const { myShop, addProduct } = useShop();
+  const { myShop, addProduct, categories } = useShop();
+
+  // v14: 12 ngành hàng + danh mục con (cây danh mục, xem
+  // supabase/schema.sql mục 9) — CategoryPicker.js lo việc chọn theo đúng 2
+  // bước (ngành hàng trước, danh mục con sau). Nếu project CHƯA chạy schema
+  // bản có bảng categories (bảng rỗng), tự động quay lại danh sách phẳng cũ
+  // (CATEGORIES trong lib/products.js) để trang không bị "trắng" ô danh mục.
+  const hasCategoryTree = categories.some((c) => !c.parentId);
+  const [legacyCategory, setLegacyCategory] = useState(CATEGORIES[0]);
+  const [categoryId, setCategoryId] = useState(null);
 
   const [name, setName] = useState("");
-  const [category, setCategory] = useState(CATEGORIES[0]);
   const [price, setPrice] = useState("");
   const [desc, setDesc] = useState("");
   const [images, setImages] = useState([]);
@@ -238,8 +247,21 @@ export default function NewProductPage() {
       setError("Giá sản phẩm phải lớn hơn 0.");
       return;
     }
+    if (hasCategoryTree && !categoryId) {
+      setError("Vui lòng chọn ngành hàng (và danh mục con nếu có) cho sản phẩm.");
+      return;
+    }
     setError("");
     setSubmitting(true);
+
+    // Danh mục cuối cùng: lấy từ cây danh mục (CategoryPicker) nếu project
+    // đã chạy schema có bảng categories, ngược lại dùng danh sách phẳng cũ
+    // (xem hasCategoryTree ở trên).
+    const selectedCategoryNode = hasCategoryTree
+      ? categories.find((c) => c.id === categoryId)
+      : null;
+    const categoryText = selectedCategoryNode ? selectedCategoryNode.name : legacyCategory;
+    const finalCategoryId = selectedCategoryNode ? selectedCategoryNode.id : null;
 
     // Kiểm duyệt nội dung bằng AI TRƯỚC khi đăng bán công khai — chặn sản
     // phẩm vi phạm (hàng cấm, dấu hiệu lừa đảo, spam...). Nếu dịch vụ AI
@@ -248,7 +270,7 @@ export default function NewProductPage() {
     // thuộc vào việc AI có sẵn sàng hay không — xem src/lib/security.js.
     const moderation = await moderateProductContent({
       name: name.trim(),
-      category,
+      category: categoryText,
       desc: desc.trim(),
     });
     if (!moderation.allowed) {
@@ -264,7 +286,8 @@ export default function NewProductPage() {
     try {
       const product = await addProduct({
         name: name.trim(),
-        category,
+        category: categoryText,
+        categoryId: finalCategoryId,
         price: priceValue,
         desc: desc.trim(),
         images,
@@ -293,20 +316,30 @@ export default function NewProductPage() {
             />
           </div>
 
-          <div>
-            <label className="block text-sm text-gray-700 mb-1">Danh mục</label>
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-gray-900"
-            >
-              {CATEGORIES.map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat}
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* v14: chọn danh mục theo ĐÚNG 2 BƯỚC — 1 trong 12 "Ngành hàng"
+              (vd "THỰC PHẨM ĐÃ CHẾ BIẾN & ĐỒ UỐNG", "THỰC PHẨM TƯƠI SỐNG &
+              NGUYÊN LIỆU"...) trước, rồi mới tới danh mục con bên trong
+              ngành hàng đó — xem CategoryPicker.js. Nếu project chưa chạy
+              schema có bảng categories thì tự quay lại danh sách phẳng cũ
+              để trang không bị thiếu ô chọn danh mục. */}
+          {hasCategoryTree ? (
+            <CategoryPicker categories={categories} categoryId={categoryId} onChange={setCategoryId} />
+          ) : (
+            <div>
+              <label className="block text-sm text-gray-700 mb-1">Danh mục</label>
+              <select
+                value={legacyCategory}
+                onChange={(e) => setLegacyCategory(e.target.value)}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-gray-900"
+              >
+                {CATEGORIES.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {cat}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div>
             <label className="block text-sm text-gray-700 mb-1">Giá (đ)</label>
@@ -490,13 +523,25 @@ export default function NewProductPage() {
 
           {error && <p className="text-sm text-red-600">{error}</p>}
 
-          <button
-            type="submit"
-            disabled={submitting || uploading || videoUploading || trimProcessing}
-            className="bg-gray-900 text-white py-2.5 rounded-md font-medium hover:bg-gray-800 transition-colors mt-2 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {submitting ? "Đang kiểm duyệt & tạo sản phẩm..." : "Tạo sản phẩm"}
-          </button>
+          {/* "Hủy": người bán đổi ý, không muốn tạo sản phẩm nữa -> quay lại
+              trang gian hàng, không lưu gì cả. */}
+          <div className="flex gap-3 mt-2">
+            <button
+              type="submit"
+              disabled={submitting || uploading || videoUploading || trimProcessing}
+              className="flex-1 bg-gray-900 text-white py-2.5 rounded-md font-medium hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {submitting ? "Đang kiểm duyệt & tạo sản phẩm..." : "Tạo sản phẩm"}
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push("/seller")}
+              disabled={submitting}
+              className="px-6 py-2.5 rounded-md font-medium border border-gray-300 text-gray-700 hover:border-gray-900 hover:text-gray-900 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Hủy
+            </button>
+          </div>
         </form>
       </div>
     </main>
