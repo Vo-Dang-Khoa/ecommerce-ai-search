@@ -14,7 +14,7 @@ import { NextResponse } from "next/server";
 import { PRODUCTS } from "@/lib/products";
 import { checkRateLimit, getClientIp } from "@/lib/security";
 
-const GEMINI_MODEL = "gemini-3.6-flash";
+const GEMINI_MODEL = "gemini-3.1-flash-lite";
 
 // 1 câu tìm kiếm nói bình thường (vài giây tới ~20 giây) chỉ tốn vài trăm
 // KB khi mã hoá base64 — giới hạn 6MB base64 (~4.5MB file thật) đã rất

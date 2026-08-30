@@ -14,7 +14,7 @@ import { PAYMENT_METHODS, SHIPPING_METHODS } from "@/lib/orderOptions";
 import { checkRateLimit, getClientIp } from "@/lib/security";
 
 // Model miễn phí (free tier, không cần thẻ) — xem chi tiết ở .env.local.example.
-const GEMINI_MODEL = "gemini-3.6-flash";
+const GEMINI_MODEL = "gemini-3.1-flash-lite";
 
 const MAX_HISTORY_MESSAGES = 12;
 const MAX_MESSAGE_LENGTH = 500;
