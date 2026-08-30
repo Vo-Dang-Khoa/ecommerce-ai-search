@@ -1,4 +1,9 @@
-import { supabase, PRODUCT_IMAGES_BUCKET, PRODUCT_VIDEOS_BUCKET } from "./supabaseClient";
+import {
+  supabase,
+  PRODUCT_IMAGES_BUCKET,
+  PRODUCT_VIDEOS_BUCKET,
+  SHOP_BANNERS_BUCKET,
+} from "./supabaseClient";
 
 export function genId(prefix) {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
@@ -215,5 +220,34 @@ export async function uploadProductVideo(file, shopId) {
   }
 
   const { data } = supabase.storage.from(PRODUCT_VIDEOS_BUCKET).getPublicUrl(path);
+  return data.publicUrl;
+}
+
+// v13: banner quảng cáo của gian hàng (xem supabase/schema.sql mục 5D và
+// src/lib/banners.js). Ảnh banner dùng LẠI đúng pipeline resize/crop của
+// ảnh sản phẩm (resizeImageFile/cropImageToFile ở trên) — chỉ khác bucket
+// lưu trữ và tỉ lệ khung cắt (BANNER_ASPECT).
+
+/**
+ * Tải 1 file ảnh banner lên Supabase Storage (bucket "shop-banners") và trả
+ * về URL công khai để lưu vào cột `image_url` của bảng shop_banners.
+ *
+ * @param {File} file - file ảnh banner đã qua resize/crop
+ * @param {string} shopId - id gian hàng, dùng để tách thư mục ảnh theo shop
+ * @returns {Promise<string>} URL công khai của ảnh banner vừa upload
+ */
+export async function uploadShopBanner(file, shopId) {
+  const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+  const path = `${shopId}/${genId("ban")}.${ext}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from(SHOP_BANNERS_BUCKET)
+    .upload(path, file, { cacheControl: "3600", upsert: false });
+
+  if (uploadError) {
+    throw new Error(`Tải ảnh banner lên Supabase thất bại: ${uploadError.message}`);
+  }
+
+  const { data } = supabase.storage.from(SHOP_BANNERS_BUCKET).getPublicUrl(path);
   return data.publicUrl;
 }

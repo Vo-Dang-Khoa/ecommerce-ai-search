@@ -8,6 +8,7 @@ import { getEffectivePrice, getProductImage } from "@/lib/shops";
 import { getCategoryPath } from "@/lib/categories";
 import { recordProductView } from "@/lib/recommendations";
 import RecommendedForYou from "../../components/RecommendedForYou";
+import AdSlot from "../../components/AdSlot";
 
 // Trang chi tiết sản phẩm — lấy dữ liệu từ Context (ShopProvider) như phần
 // còn lại của app, đầy đủ hơn ProductQuickView (modal "Xem nhanh"): có
@@ -211,6 +212,14 @@ export default function ProductDetail({ id }) {
             </button>
           </div>
         </div>
+      </div>
+
+      {/* Banner quảng cáo — ưu tiên banner của CHÍNH gian hàng đang bán sản
+          phẩm này (preferShopId), rơi về banner gian hàng khác nếu gian
+          hàng này chưa tạo banner (xem pickBanner ở src/lib/banners.js).
+          AdSlot tự ẩn nếu chưa có banner nào đang bật. */}
+      <div className="mt-12">
+        <AdSlot preferShopId={product.shopId} />
       </div>
 
       <div className="mt-16">

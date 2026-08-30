@@ -383,6 +383,24 @@ function mapCategoryAttribute(row) {
   };
 }
 
+// v13: chuyển 1 dòng bảng `shop_banners` thành object camelCase cho UI
+// (AdBanner.js, AdSlot.js, BannerManager.js) dùng — `shopName` được ghép
+// thêm từ bảng shops (không có cột riêng ở shop_banners) để AdBanner có
+// thể hiện tên gian hàng đang được quảng cáo.
+function mapBanner(row, shopName) {
+  return {
+    id: row.id,
+    shopId: row.shop_id,
+    shopName: shopName || "",
+    title: row.title,
+    subtitle: row.subtitle || "",
+    imageUrl: row.image_url,
+    linkUrl: row.link_url || "",
+    theme: row.theme || "amber",
+    active: row.active,
+  };
+}
+
 function ShopProvider({ children }) {
   const { user } = useAuth();
   const [shops, setShops] = useState([]);
@@ -391,6 +409,9 @@ function ShopProvider({ children }) {
   // (category_attributes) — xem supabase/schema.sql mục 9.
   const [categories, setCategories] = useState([]);
   const [categoryAttributes, setCategoryAttributes] = useState([]);
+  // v13: banner quảng cáo theo gian hàng (xem supabase/schema.sql mục 5D và
+  // src/lib/banners.js) — mỗi phần tử là 1 banner (tối đa 1/gian hàng).
+  const [banners, setBanners] = useState([]);
   const [hydrated, setHydrated] = useState(false);
   const [loadError, setLoadError] = useState("");
 
@@ -403,22 +424,31 @@ function ShopProvider({ children }) {
 
     async function loadFromSupabase() {
       try {
-        const [shopsRes, productsRes, categoriesRes, categoryAttrsRes] = await Promise.all([
-          supabase.from("shops").select("*").order("created_at", { ascending: true }),
-          supabase.from("products").select("*").order("created_at", { ascending: true }),
-          supabase.from("categories").select("*").order("sort_order", { ascending: true }),
-          supabase
-            .from("category_attributes")
-            .select("*")
-            .order("sort_order", { ascending: true }),
-        ]);
+        const [shopsRes, productsRes, categoriesRes, categoryAttrsRes, bannersRes] =
+          await Promise.all([
+            supabase.from("shops").select("*").order("created_at", { ascending: true }),
+            supabase.from("products").select("*").order("created_at", { ascending: true }),
+            supabase.from("categories").select("*").order("sort_order", { ascending: true }),
+            supabase
+              .from("category_attributes")
+              .select("*")
+              .order("sort_order", { ascending: true }),
+            // v13: xem mục 5D trong supabase/schema.sql — bảng có thể chưa tồn
+            // tại nếu project chưa chạy bản schema mới nhất, xử lý như
+            // categories/category_attributes bên dưới (chỉ cảnh báo, không throw).
+            supabase
+              .from("shop_banners")
+              .select("*")
+              .order("created_at", { ascending: false }),
+          ]);
 
         if (shopsRes.error) throw shopsRes.error;
         if (productsRes.error) throw productsRes.error;
-        // categories/category_attributes: KHÔNG throw nếu lỗi (vd: project
-        // chưa chạy supabase/schema.sql bản v8 mới nhất, 2 bảng này chưa tồn
-        // tại) — chỉ cảnh báo, để app vẫn chạy được (Sidebar/bộ lọc danh mục
-        // mới chỉ đơn giản là rỗng) thay vì sập toàn bộ trang.
+        // categories/category_attributes/shop_banners: KHÔNG throw nếu lỗi
+        // (vd: project chưa chạy supabase/schema.sql bản mới nhất, các bảng
+        // này chưa tồn tại) — chỉ cảnh báo, để app vẫn chạy được (Sidebar/bộ
+        // lọc danh mục, banner quảng cáo chỉ đơn giản là rỗng) thay vì sập
+        // toàn bộ trang.
         if (categoriesRes.error) {
           console.warn(
             "[ShopProvider] Không tải được bảng categories (có thể project chưa chạy " +
@@ -432,12 +462,25 @@ function ShopProvider({ children }) {
             categoryAttrsRes.error
           );
         }
+        if (bannersRes.error) {
+          console.warn(
+            "[ShopProvider] Không tải được bảng shop_banners (có thể project chưa chạy " +
+              "supabase/schema.sql bản v13 mới nhất):",
+            bannersRes.error
+          );
+        }
         if (cancelled) return;
 
-        setShops((shopsRes.data || []).map(mapShop));
+        const shopRows = shopsRes.data || [];
+        const shopNameById = new Map(shopRows.map((s) => [s.id, s.name]));
+
+        setShops(shopRows.map(mapShop));
         setSellerProducts((productsRes.data || []).map(mapProduct));
         setCategories((categoriesRes.data || []).map(mapCategory));
         setCategoryAttributes((categoryAttrsRes.data || []).map(mapCategoryAttribute));
+        setBanners(
+          (bannersRes.data || []).map((row) => mapBanner(row, shopNameById.get(row.shop_id)))
+        );
       } catch (err) {
         if (!cancelled) {
           console.error("[ShopProvider] Không tải được dữ liệu từ Supabase:", err);
@@ -458,6 +501,10 @@ function ShopProvider({ children }) {
   }, []);
 
   const myShop = user ? shops.find((s) => s.ownerId === user.id) ?? null : null;
+
+  // v13: banner quảng cáo của CHÍNH gian hàng mình (dùng ở trang quản lý
+  // /seller — BannerManager.js) — mỗi gian hàng chỉ có tối đa 1 banner.
+  const myBanner = myShop ? banners.find((b) => b.shopId === myShop.id) ?? null : null;
 
   async function registerShop({ name, description, phone }) {
     if (!user) throw new Error("Bạn cần đăng nhập trước.");
@@ -605,6 +652,47 @@ function ShopProvider({ children }) {
     await updateProduct(productId, { attributes });
   }
 
+  // v13: tạo/sửa banner quảng cáo của gian hàng mình bằng upsert theo
+  // shop_id (bảng shop_banners có ràng buộc unique(shop_id) — xem
+  // supabase/schema.sql mục 5D), nên vừa dùng được để TẠO MỚI lẫn CẬP NHẬT
+  // banner đã có mà không cần biết trước banner đó đã tồn tại hay chưa.
+  async function saveBanner({ title, subtitle = "", imageUrl, linkUrl = "", theme = "amber", active = true }) {
+    if (!myShop) throw new Error("Bạn cần đăng ký gian hàng trước.");
+    const { data, error } = await supabase
+      .from("shop_banners")
+      .upsert(
+        {
+          shop_id: myShop.id,
+          title,
+          subtitle: subtitle || "",
+          image_url: imageUrl,
+          link_url: linkUrl || "",
+          theme: theme || "amber",
+          active,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "shop_id" }
+      )
+      .select()
+      .single();
+    if (error) throw error;
+
+    const banner = mapBanner(data, myShop.name);
+    setBanners((prev) => {
+      const rest = prev.filter((b) => b.shopId !== myShop.id);
+      return [banner, ...rest];
+    });
+    return banner;
+  }
+
+  async function deleteBanner() {
+    if (!myShop) return;
+    const { error } = await supabase.from("shop_banners").delete().eq("shop_id", myShop.id);
+    if (error) throw error;
+
+    setBanners((prev) => prev.filter((b) => b.shopId !== myShop.id));
+  }
+
   const myShopProducts = myShop
     ? sellerProducts.filter((p) => p.shopId === myShop.id)
     : [];
@@ -633,8 +721,12 @@ function ShopProvider({ children }) {
         allProducts,
         categories,
         categoryAttributes,
+        banners,
+        myBanner,
         registerShop,
         updateShop,
+        saveBanner,
+        deleteBanner,
         addProduct,
         removeProduct,
         updateProduct,

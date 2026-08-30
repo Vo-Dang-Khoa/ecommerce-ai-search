@@ -1,8 +1,10 @@
--- ShopAI (ecommerce-ai-search) — Supabase schema (v12: thêm cột
--- products.video_url + bucket Storage "product-videos", cho phép người bán
--- đính kèm 1 video giới thiệu sản phẩm — xem mục 3 và mục 5B).
+-- ShopAI (ecommerce-ai-search) — Supabase schema (v13: thêm bảng
+-- shop_banners + bucket Storage "shop-banners" — mỗi gian hàng tự tạo 1
+-- banner quảng cáo, hiển thị luân phiên ở nhiều trang của web — xem mục 5D).
 --
--- Lịch sử: v11 thêm cột lưu vết kiểm duyệt nội dung sản phẩm bằng AI —
+-- Lịch sử: v12 thêm cột products.video_url + bucket Storage
+-- "product-videos", cho phép người bán đính kèm 1 video giới thiệu sản
+-- phẩm (mục 3 và mục 5B); v11 thêm cột lưu vết kiểm duyệt nội dung sản phẩm bằng AI —
 -- products.moderation_status/moderation_reason (xem mục 3 gần cuối file +
 -- /api/moderate-product); v10 sắp xếp lại vị trí danh mục cha "THUỐC & SỨC
 -- KHỎE" (giữa
@@ -21,8 +23,8 @@
 -- mình; v4 thêm Supabase Auth thật + phân vai trò + số điện thoại/địa chỉ
 -- giao hàng + bảng orders/order_items.
 --
--- File này AN TOÀN để chạy lại (idempotent). Nếu bạn đã chạy bản v1-v11 trước
--- đó, chỉ cần chạy lại TOÀN BỘ file v12 này thêm 1 lần — nó tự thêm/sửa
+-- File này AN TOÀN để chạy lại (idempotent). Nếu bạn đã chạy bản v1-v12 trước
+-- đó, chỉ cần chạy lại TOÀN BỘ file v13 này thêm 1 lần — nó tự thêm/sửa
 -- bảng/cột/policy/danh mục, không xoá dữ liệu tài khoản/gian hàng/sản
 -- phẩm/danh mục đã có.
 --
@@ -333,6 +335,95 @@ create policy "Authenticated can update product videos" on storage.objects
 drop policy if exists "Authenticated can delete product videos" on storage.objects;
 create policy "Authenticated can delete product videos" on storage.objects
   for delete to authenticated using (bucket_id = 'product-videos');
+
+-- ============================================================
+-- 5D (v13). Banner quảng cáo của gian hàng — MỖI GIAN HÀNG CHỈ CÓ 1 BANNER
+--    (unique shop_id, tạo/sửa qua upsert ở trang /seller). Banner này được
+--    hiển thị LUÂN PHIÊN GIỮA CÁC GIAN HÀNG ở nhiều trang của web (trang
+--    chủ, danh sách/danh mục sản phẩm, chi tiết sản phẩm — xem
+--    src/lib/banners.js hàm pickBanner), giống hình thức "quảng cáo chéo"
+--    giữa người bán trên các sàn TMĐT thật, chứ không chỉ hiện trên trang
+--    riêng của gian hàng đó.
+--    `theme` giới hạn trong vài tông màu đã được chọn sẵn (xem
+--    BANNER_THEMES trong src/lib/banners.js) để banner luôn hài hoà với
+--    giao diện chung của web dù người bán chọn tông nào — không cho nhập
+--    mã màu tự do (dễ chọn màu chói/khó đọc chữ).
+-- ============================================================
+create table if not exists shop_banners (
+  id uuid primary key default gen_random_uuid(),
+  shop_id uuid not null unique references shops (id) on delete cascade,
+  title text not null,
+  subtitle text not null default '',
+  image_url text not null,
+  link_url text not null default '',
+  theme text not null default 'amber'
+    check (theme in ('amber', 'rose', 'emerald', 'sky', 'slate')),
+  active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists shop_banners_active_idx on shop_banners (active);
+
+alter table shop_banners enable row level security;
+
+-- Khách (kể cả chưa đăng nhập) chỉ thấy banner ĐANG BẬT (active = true) —
+-- dùng cho các trang công khai (trang chủ, danh sách sản phẩm...).
+drop policy if exists "Public can read active shop banners" on shop_banners;
+create policy "Public can read active shop banners" on shop_banners
+  for select using (active = true);
+
+-- Người bán cần thấy ĐƯỢC CẢ banner đang tắt của chính mình (để sửa/bật
+-- lại ở trang /seller) — 2 policy select cho cùng lệnh SELECT được Postgres
+-- nối bằng OR, nên không xung đột với policy công khai ở trên.
+drop policy if exists "Owners can read own shop banner" on shop_banners;
+create policy "Owners can read own shop banner" on shop_banners
+  for select using (
+    shop_id in (select id from shops where owner_id = auth.uid())
+  );
+
+drop policy if exists "Owners can insert own shop banner" on shop_banners;
+create policy "Owners can insert own shop banner" on shop_banners
+  for insert with check (
+    shop_id in (select id from shops where owner_id = auth.uid())
+  );
+
+drop policy if exists "Owners can update own shop banner" on shop_banners;
+create policy "Owners can update own shop banner" on shop_banners
+  for update using (
+    shop_id in (select id from shops where owner_id = auth.uid())
+  );
+
+drop policy if exists "Owners can delete own shop banner" on shop_banners;
+create policy "Owners can delete own shop banner" on shop_banners
+  for delete using (
+    shop_id in (select id from shops where owner_id = auth.uid())
+  );
+
+-- Storage bucket lưu ẢNH banner — cùng cách phân quyền với bucket ảnh sản
+-- phẩm ở mục 5 (public đọc, chỉ người đã đăng nhập được ghi). file_size_limit
+-- 5MB đủ rộng cho ảnh banner đã resize còn khoảng 1.5MB ở trình duyệt
+-- (resizeImageFile, xem src/lib/shops.js) — đây là lớp chặn AN TOÀN Ở
+-- SERVER, không phải giới hạn chính.
+insert into storage.buckets (id, name, public, file_size_limit)
+values ('shop-banners', 'shop-banners', true, 5242880)
+on conflict (id) do update set file_size_limit = excluded.file_size_limit;
+
+drop policy if exists "Public can read shop banners" on storage.objects;
+create policy "Public can read shop banners" on storage.objects
+  for select using (bucket_id = 'shop-banners');
+
+drop policy if exists "Authenticated can upload shop banners" on storage.objects;
+create policy "Authenticated can upload shop banners" on storage.objects
+  for insert to authenticated with check (bucket_id = 'shop-banners');
+
+drop policy if exists "Authenticated can update shop banners" on storage.objects;
+create policy "Authenticated can update shop banners" on storage.objects
+  for update to authenticated using (bucket_id = 'shop-banners');
+
+drop policy if exists "Authenticated can delete shop banners" on storage.objects;
+create policy "Authenticated can delete shop banners" on storage.objects
+  for delete to authenticated using (bucket_id = 'shop-banners');
 
 -- ============================================================
 -- 6. Đơn hàng — tạo ra khi Người mua bấm "Xác nhận đặt hàng" ở /checkout,

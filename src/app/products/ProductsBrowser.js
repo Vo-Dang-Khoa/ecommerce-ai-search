@@ -3,6 +3,7 @@
 import Link from "next/link";
 import ProductCard from "../components/ProductCard";
 import RecommendedForYou from "../components/RecommendedForYou";
+import AdSlot from "../components/AdSlot";
 import { CATEGORIES } from "@/lib/products";
 import { useShop } from "../providers";
 
@@ -51,6 +52,13 @@ export default function ProductsBrowser({ category }) {
             {cat}
           </Link>
         ))}
+      </div>
+
+      {/* Banner quảng cáo — hiện ở mọi chế độ xem (kể cả đã lọc theo danh
+          mục), khác với mục "Gợi ý dành cho bạn" ở trên chỉ hiện khi xem
+          "Tất cả". AdSlot tự ẩn (return null) nếu chưa có banner nào. */}
+      <div className="mb-8">
+        <AdSlot />
       </div>
 
       {products.length === 0 ? (

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import RecommendedForYou from "./components/RecommendedForYou";
+import AdSlot from "./components/AdSlot";
 
 const categories = [
   {
@@ -102,6 +103,13 @@ export default function Home() {
           Đặt ngay sau Hero để bắt mắt trước khi vào phần danh mục chung. */}
       <section className="max-w-7xl mx-auto px-4 pt-16">
         <RecommendedForYou />
+      </section>
+
+      {/* Banner quảng cáo của gian hàng — luân phiên giữa các gian hàng
+          đang bật banner (xem src/lib/banners.js hàm pickBanner). Không
+          hiển thị gì nếu chưa có banner nào (AdSlot tự return null). */}
+      <section className="max-w-7xl mx-auto px-4 pt-10">
+        <AdSlot />
       </section>
 
       {/* Danh mục bánh */}

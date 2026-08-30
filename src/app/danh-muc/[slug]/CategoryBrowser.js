@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import ProductCard from "../../components/ProductCard";
 import CategorySidebar from "../../components/CategorySidebar";
+import AdSlot from "../../components/AdSlot";
 import { useShop } from "../../providers";
 import {
   buildCategoryTree,
@@ -94,6 +95,12 @@ export default function CategoryBrowser({ slug }) {
         </p>
         <h1 className="text-3xl font-bold text-gray-900 mb-2">{category.name}</h1>
         <p className="text-gray-600 mb-6">{filteredProducts.length} sản phẩm</p>
+
+        {/* Banner quảng cáo — AdSlot tự ẩn (return null) nếu chưa có gian
+            hàng nào tạo banner. */}
+        <div className="mb-8">
+          <AdSlot />
+        </div>
 
         {availableAttributes.length > 0 && (
           <div className="flex flex-wrap items-end gap-3 mb-8 border border-gray-200 rounded-xl p-4">

@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { useAuth, useShop, useOrders } from "../providers";
 import { getEffectivePrice, getProductImage } from "@/lib/shops";
 import { paymentMethodLabel, shippingMethodLabel } from "@/lib/orderOptions";
+import BannerManager from "./BannerManager";
 
 // "Người bán" trong header dẫn tới đây — mục "Tài khoản người bán" là gian
 // hàng/sản phẩm (nội dung cũ của trang), 4 mục còn lại là đơn hàng có chứa
@@ -261,6 +262,8 @@ function ShopContent({ shop }) {
   return (
     <>
       <ShopInfoCard shop={shop} />
+
+      <BannerManager shop={shop} />
 
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-bold text-gray-900">
