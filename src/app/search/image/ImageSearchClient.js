@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import ProductCard from "../../components/ProductCard";
 
 // 9MB (đúng bằng giới hạn phía server /api/search-image) — chặn sớm ở
@@ -26,15 +26,110 @@ export default function ImageSearchClient() {
   const [error, setError] = useState("");
   const [description, setDescription] = useState("");
   const [results, setResults] = useState(null);
-  const uploadInputRef = useRef(null);
-  const cameraInputRef = useRef(null);
 
-  function handleFileChange(e) {
+  // Camera trực tiếp trong trang (KHÁC với input file "capture" trước đây
+  // — cái đó chỉ mở app camera riêng của hệ điều hành rồi trả về file, còn
+  // đây mở luôn khung hình camera NGAY TRONG trang web, có nút "Chụp"
+  // riêng, giống hệt cách trang quét mã vạch (/search/barcode) đang làm).
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraError, setCameraError] = useState("");
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+  const uploadInputRef = useRef(null);
+
+  // Dọn dẹp: tắt camera nếu người dùng rời trang trong lúc camera đang mở
+  // — nếu không trình duyệt vẫn giữ đèn camera sáng dù đã rời trang.
+  useEffect(() => {
+    return () => stopCameraStream();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- chỉ chạy dọn dẹp 1 lần lúc unmount
+  }, []);
+
+  function stopCameraStream() {
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+  }
+
+  async function openCamera() {
+    setError("");
+    setCameraError("");
+    setDescription("");
+    setResults(null);
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment" },
+        audio: false,
+      });
+      streamRef.current = stream;
+      setCameraOpen(true);
+      // Gán stream vào thẻ <video> ngay sau khi nó được render (xem effect
+      // bên dưới) — không gán trực tiếp ở đây vì videoRef.current lúc này
+      // vẫn còn null (thẻ <video> chỉ render khi cameraOpen = true).
+    } catch (err) {
+      const name = err?.name || "";
+      if (name === "NotAllowedError" || name === "SecurityError") {
+        setCameraError(
+          "Trình duyệt/thiết bị chưa cấp quyền dùng camera. Hãy cho phép truy cập camera rồi thử lại."
+        );
+      } else if (name === "NotFoundError") {
+        setCameraError("Không tìm thấy camera trên thiết bị này.");
+      } else if (name === "NotReadableError") {
+        setCameraError(
+          "Camera đang được ứng dụng khác sử dụng, vui lòng đóng ứng dụng đó rồi thử lại."
+        );
+      } else {
+        setCameraError("Không thể mở camera, vui lòng thử lại hoặc dùng cách tải ảnh có sẵn.");
+      }
+      setCameraOpen(false);
+    }
+  }
+
+  // Gán stream vào <video> ngay khi thẻ video xuất hiện trong DOM.
+  useEffect(() => {
+    if (cameraOpen && videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current;
+    }
+  }, [cameraOpen]);
+
+  function closeCamera() {
+    stopCameraStream();
+    setCameraOpen(false);
+  }
+
+  function capturePhoto() {
+    const video = videoRef.current;
+    if (!video || !video.videoWidth) return;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    closeCamera();
+
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) {
+          setError("Không chụp được ảnh, vui lòng thử lại.");
+          return;
+        }
+        setPreviewUrl(URL.createObjectURL(blob));
+        submitImage(blob);
+      },
+      "image/jpeg",
+      0.9
+    );
+  }
+
+  function handleUploadChange(e) {
     const file = e.target.files?.[0];
     // Cho phép chọn lại đúng tệp cũ ở lần sau vẫn kích hoạt onChange.
     e.target.value = "";
     if (!file) return;
+    validateAndUse(file);
+  }
 
+  function validateAndUse(file) {
     setError("");
     setDescription("");
     setResults(null);
@@ -52,17 +147,18 @@ export default function ImageSearchClient() {
     submitImage(file);
   }
 
-  async function submitImage(file) {
+  async function submitImage(fileOrBlob) {
     setLoading(true);
     setError("");
     setResults(null);
 
     try {
-      const base64Image = await fileToBase64(file);
+      const mimeType = fileOrBlob.type || "image/jpeg";
+      const base64Image = await fileToBase64(fileOrBlob);
       const res = await fetch("/api/search-image", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image: base64Image, mimeType: file.type }),
+        body: JSON.stringify({ image: base64Image, mimeType }),
       });
       const data = await res.json().catch(() => ({}));
 
@@ -84,10 +180,6 @@ export default function ImageSearchClient() {
     uploadInputRef.current?.click();
   }
 
-  function triggerCameraCapture() {
-    cameraInputRef.current?.click();
-  }
-
   return (
     <main className="flex-1 bg-white">
       <div className="max-w-2xl mx-auto px-4 py-12 text-center">
@@ -98,51 +190,79 @@ export default function ImageSearchClient() {
           Tải lên ảnh bánh bạn thích
         </h1>
         <p className="text-gray-600 mb-8">
-          Tải lên ảnh có sẵn, hoặc chụp ảnh mới ngay tại chỗ — AI sẽ nhìn và gợi ý sản phẩm
-          tương tự trong cửa hàng.
+          Tải lên ảnh có sẵn, hoặc mở camera chụp ảnh mới ngay tại chỗ — AI sẽ nhìn và gợi ý
+          sản phẩm tương tự trong cửa hàng.
         </p>
 
-        {/* Input KHÔNG có "capture" -> mở trình chọn tệp/thư viện ảnh bình
-            thường, dùng khi ảnh đã có sẵn trên thiết bị. */}
+        {/* Trình chọn tệp/thư viện ảnh bình thường — dùng khi ảnh đã có sẵn
+            trên thiết bị. */}
         <input
           ref={uploadInputRef}
           type="file"
           accept="image/*"
-          onChange={handleFileChange}
-          className="hidden"
-        />
-        {/* Input CÓ "capture=environment" -> mở thẳng camera sau để chụp
-            ảnh mới, dùng khi chưa có sẵn ảnh, cần chụp ngay. */}
-        <input
-          ref={cameraInputRef}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          onChange={handleFileChange}
+          onChange={handleUploadChange}
           className="hidden"
         />
 
-        <div className="flex flex-col sm:flex-row gap-3 justify-center mb-6">
-          <button
-            type="button"
-            onClick={triggerUploadPicker}
-            disabled={loading}
-            className="bg-gray-900 text-white px-6 py-3 rounded-md font-medium hover:bg-gray-800 transition-colors disabled:opacity-50"
-          >
-            {loading ? "Đang phân tích ảnh..." : "🖼️ Tải ảnh có sẵn"}
-          </button>
-          <button
-            type="button"
-            onClick={triggerCameraCapture}
-            disabled={loading}
-            className="border border-gray-900 text-gray-900 px-6 py-3 rounded-md font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
-          >
-            📷 Chụp ảnh mới
-          </button>
-        </div>
+        {!cameraOpen && (
+          <div className="flex flex-col sm:flex-row gap-3 justify-center mb-6">
+            <button
+              type="button"
+              onClick={triggerUploadPicker}
+              disabled={loading}
+              className="bg-gray-900 text-white px-6 py-3 rounded-md font-medium hover:bg-gray-800 transition-colors disabled:opacity-50"
+            >
+              {loading ? "Đang phân tích ảnh..." : "🖼️ Tải ảnh có sẵn"}
+            </button>
+            <button
+              type="button"
+              onClick={openCamera}
+              disabled={loading}
+              className="border border-gray-900 text-gray-900 px-6 py-3 rounded-md font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
+            >
+              📷 Chụp ảnh mới
+            </button>
+          </div>
+        )}
 
-        {previewUrl && (
-          // eslint-disable-next-line @next/next/no-img-element -- ảnh xem trước từ file khách vừa chọn, không phải asset tĩnh
+        {cameraError && (
+          <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-md px-4 py-3 mb-6 text-left">
+            {cameraError}
+          </div>
+        )}
+
+        {/* Khung camera trực tiếp — chỉ hiện khi đã mở camera thành công. */}
+        {cameraOpen && (
+          <div className="mb-6">
+            {/* eslint-disable-next-line jsx-a11y/media-has-caption -- video xem trước từ camera, không có phụ đề */}
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              className="w-full max-w-sm mx-auto rounded-lg border border-gray-200 bg-black"
+            />
+            <div className="flex gap-3 justify-center mt-4">
+              <button
+                type="button"
+                onClick={capturePhoto}
+                className="bg-gray-900 text-white px-6 py-2.5 rounded-md font-medium hover:bg-gray-800 transition-colors"
+              >
+                📸 Chụp ảnh
+              </button>
+              <button
+                type="button"
+                onClick={closeCamera}
+                className="border border-gray-300 text-gray-700 px-6 py-2.5 rounded-md font-medium hover:border-gray-900 hover:text-gray-900 transition-colors"
+              >
+                Huỷ
+              </button>
+            </div>
+          </div>
+        )}
+
+        {previewUrl && !cameraOpen && (
+          // eslint-disable-next-line @next/next/no-img-element -- ảnh xem trước từ file/ảnh vừa chụp, không phải asset tĩnh
           <img
             src={previewUrl}
             alt="Ảnh bạn đã chọn"
