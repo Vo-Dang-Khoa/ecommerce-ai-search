@@ -97,21 +97,16 @@ export default function ProductsBrowser({ category }) {
           ))}
         </div>
       ) : (
-        // Thanh nút bấm nhanh "Tất cả" + 12 ngành hàng — bấm vào 1 ngành
-        // hàng thì trang tự cuộn mượt xuống đúng khối ngành hàng đó (neo
+        // Thanh nút bấm nhanh 12 ngành hàng — bấm vào 1 ngành hàng thì
+        // trang tự cuộn mượt xuống đúng khối ngành hàng đó (neo
         // #industry-<id> đặt trên section tương ứng ở IndustrySection.js),
-        // KHÔNG tải lại trang hay lọc lại danh sách. Lưới 7 cột (từ màn
-        // hình sm trở lên) để 13 nút (Tất cả + 12 ngành hàng) luôn gọn
-        // trong ĐÚNG 2 hàng (7 + 6) thay vì tràn thành nhiều hàng như kiểu
-        // chip cũ; mỗi nút cao bằng nhau (items-stretch) và được PHÉP xuống
-        // dòng (không ép 1 dòng) vì tên ngành hàng khá dài.
-        <div className="grid grid-cols-3 sm:grid-cols-7 gap-2 mb-8 items-stretch">
-          <a
-            href="#products-top"
-            className="flex items-center justify-center text-center rounded-lg border bg-gray-900 text-white border-gray-900 hover:bg-gray-800 transition-colors px-2 py-2.5 text-[11px] sm:text-xs font-semibold leading-tight"
-          >
-            Tất cả
-          </a>
+        // KHÔNG tải lại trang hay lọc lại danh sách (đã bỏ nút "Tất cả" —
+        // trang mặc định vốn đã hiện đủ cả 12 ngành hàng, và đã có nút nổi
+        // "Về đầu trang" ở BackToTopButton.js lo việc quay lại đầu trang).
+        // Lưới 6 cột (từ màn hình sm trở lên) để ĐÚNG 12 nút xếp vừa khít
+        // 2 hàng (6 + 6); mỗi nút cao bằng nhau (items-stretch) và được
+        // PHÉP xuống dòng (không ép 1 dòng) vì tên ngành hàng khá dài.
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 mb-8 items-stretch">
           {roots.map((root, i) => {
             const color = INDUSTRY_NAV_COLORS[i % INDUSTRY_NAV_COLORS.length];
             return (
