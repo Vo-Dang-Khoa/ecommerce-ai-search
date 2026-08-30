@@ -9,11 +9,15 @@ import {
   uploadProductImage,
   resizeImageFile,
   uploadProductVideo,
-  validateProductVideo,
+  readVideoDuration,
   VIDEO_MAX_SECONDS,
   VIDEO_MAX_BYTES,
 } from "@/lib/shops";
+import { isVideoReencodeSupported, reencodeVideoSegment, autoCompressVideo } from "@/lib/videoProcessing";
 import { moderateProductContent } from "@/lib/security";
+import CapturePhotoButton from "./CapturePhotoButton";
+import RecordVideoButton from "./RecordVideoButton";
+import VideoTrimModal from "./VideoTrimModal";
 
 export default function NewProductPage() {
   const router = useRouter();
@@ -31,6 +35,10 @@ export default function NewProductPage() {
   const [videoUrl, setVideoUrl] = useState("");
   const [videoUploading, setVideoUploading] = useState(false);
   const [videoError, setVideoError] = useState("");
+  // Video quá {VIDEO_MAX_SECONDS} giây -> mở khung cắt (VideoTrimModal) chờ
+  // người bán chọn đoạn cần giữ, thay vì từ chối thẳng như trước (v12).
+  const [pendingTrim, setPendingTrim] = useState(null); // { url, duration } | null
+  const [trimProcessing, setTrimProcessing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -53,6 +61,13 @@ export default function NewProductPage() {
     );
   }
 
+  // Dùng chung cho cả 2 nguồn ảnh (chọn từ máy và chụp/cắt bằng camera):
+  // thu nhỏ nếu cần rồi tải lên Supabase Storage.
+  async function uploadOneImage(file) {
+    const resized = await resizeImageFile(file);
+    return uploadProductImage(resized, myShop.id);
+  }
+
   async function handleFiles(e) {
     const files = Array.from(e.target.files || []);
     e.target.value = "";
@@ -61,13 +76,11 @@ export default function NewProductPage() {
     setError("");
     setUploading(true);
     try {
-      // Upload tuần tự để giữ đúng thứ tự ảnh người dùng chọn. Ảnh vượt quá
-      // kích thước/dung lượng khuyến nghị sẽ được TỰ ĐỘNG thu nhỏ trước khi
-      // tải lên (resizeImageFile) — không còn từ chối thẳng như trước.
+      // Upload tuần tự để giữ đúng thứ tự ảnh người dùng chọn.
       const urls = [];
       for (const file of files) {
-        const resized = await resizeImageFile(file);
-        const url = await uploadProductImage(resized, myShop.id);
+        // eslint-disable-next-line no-await-in-loop -- cần tải tuần tự để giữ đúng thứ tự ảnh
+        const url = await uploadOneImage(file);
         urls.push(url);
       }
       setImages((prev) => [...prev, ...urls]);
@@ -78,35 +91,118 @@ export default function NewProductPage() {
     }
   }
 
-  async function handleVideoChange(e) {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
+  // Ảnh vừa chụp bằng camera (giữ nguyên hoặc đã cắt) — xem CapturePhotoButton.
+  async function handleCapturedImage(file) {
+    setError("");
+    setUploading(true);
+    try {
+      const url = await uploadOneImage(file);
+      setImages((prev) => [...prev, url]);
+    } catch (err) {
+      setError(err.message || "Tải ảnh lên Supabase thất bại.");
+    } finally {
+      setUploading(false);
+    }
+  }
 
-    setVideoError("");
+  function videoErrorMessage(err, fallback) {
+    if (err?.message === "UNSUPPORTED") {
+      return (
+        "Trình duyệt này chưa hỗ trợ tự động cắt/nén video. Vui lòng dùng ứng dụng cắt/nén " +
+        "video có sẵn trên điện thoại hoặc máy tính rồi tải lại."
+      );
+    }
+    return err?.message || fallback;
+  }
+
+  // Xử lý chung cho video dù đến từ input file ("Tải Video lên") hay vừa
+  // quay bằng camera ("Quay Video mới"): đọc thời lượng, nếu quá
+  // {VIDEO_MAX_SECONDS} giây thì mở khung cắt (pendingTrim) chờ người bán
+  // chọn đoạn giữ lại; nếu chỉ quá {VIDEO_MAX_BYTES} thì TỰ ĐỘNG nén rồi
+  // tải lên luôn, không cần hỏi lại.
+  async function handleIncomingVideo(file) {
     if (!file.type.startsWith("video/")) {
       setVideoError("Vui lòng chọn 1 tệp video.");
       return;
     }
-
+    setVideoError("");
     setVideoUploading(true);
     try {
-      // Kiểm tra thời lượng/dung lượng TRƯỚC khi tải lên — nếu vượt giới
-      // hạn, báo lỗi kèm hướng dẫn cụ thể để người bán tự cắt/nén, không
-      // tự động tải video quá khổ lên Supabase.
-      const validationError = await validateProductVideo(file);
-      if (validationError) {
-        setVideoError(validationError);
+      const duration = await readVideoDuration(file);
+
+      if (duration > VIDEO_MAX_SECONDS) {
+        if (!isVideoReencodeSupported()) {
+          setVideoError(
+            `Video dài ${Math.round(duration)} giây, vượt quá ${VIDEO_MAX_SECONDS} giây cho phép. ` +
+              `Trình duyệt này chưa hỗ trợ cắt video tự động — hãy cắt bớt video (giữ khoảng ` +
+              `${VIDEO_MAX_SECONDS} giây đầu) bằng ứng dụng có sẵn trên điện thoại rồi tải lại.`
+          );
+          return;
+        }
+        setPendingTrim({ url: URL.createObjectURL(file), duration });
         return;
       }
 
-      const url = await uploadProductVideo(file, myShop.id);
+      let workingFile = file;
+      if (workingFile.size > VIDEO_MAX_BYTES) {
+        if (!isVideoReencodeSupported()) {
+          const sizeMb = (workingFile.size / (1024 * 1024)).toFixed(1);
+          setVideoError(
+            `Video nặng ${sizeMb}MB, vượt quá ${VIDEO_MAX_BYTES / (1024 * 1024)}MB cho phép. ` +
+              `Trình duyệt này chưa hỗ trợ tự động giảm dung lượng — hãy nén video bằng ứng dụng ` +
+              `có sẵn trên điện thoại/máy tính rồi tải lại.`
+          );
+          return;
+        }
+        const sourceUrl = URL.createObjectURL(workingFile);
+        workingFile = await autoCompressVideo(sourceUrl, duration, VIDEO_MAX_BYTES);
+        URL.revokeObjectURL(sourceUrl);
+      }
+
+      const url = await uploadProductVideo(workingFile, myShop.id);
       setVideoUrl(url);
     } catch (err) {
-      setVideoError(err.message || "Tải video lên Supabase thất bại.");
+      setVideoError(videoErrorMessage(err, "Xử lý video thất bại, vui lòng thử lại."));
     } finally {
       setVideoUploading(false);
     }
+  }
+
+  function handleVideoChange(e) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    handleIncomingVideo(file);
+  }
+
+  async function handleTrimConfirm(start, end) {
+    if (!pendingTrim) return;
+    const sourceUrl = pendingTrim.url;
+    setTrimProcessing(true);
+    try {
+      let trimmedFile = await reencodeVideoSegment(sourceUrl, { start, end });
+      if (trimmedFile.size > VIDEO_MAX_BYTES) {
+        const trimmedUrl = URL.createObjectURL(trimmedFile);
+        trimmedFile = await autoCompressVideo(trimmedUrl, end - start, VIDEO_MAX_BYTES);
+        URL.revokeObjectURL(trimmedUrl);
+      }
+      URL.revokeObjectURL(sourceUrl);
+      setPendingTrim(null);
+
+      const url = await uploadProductVideo(trimmedFile, myShop.id);
+      setVideoUrl(url);
+    } catch (err) {
+      URL.revokeObjectURL(sourceUrl);
+      setPendingTrim(null);
+      setVideoError(videoErrorMessage(err, "Cắt video thất bại, vui lòng thử lại."));
+    } finally {
+      setTrimProcessing(false);
+    }
+  }
+
+  function handleTrimCancel() {
+    if (pendingTrim) URL.revokeObjectURL(pendingTrim.url);
+    setPendingTrim(null);
   }
 
   function handleRemoveVideo() {
@@ -260,29 +356,34 @@ export default function NewProductPage() {
               </div>
             )}
 
-            {/* Nút chọn ảnh TỪ MÁY để tải lên Supabase Storage — đây mới là
-                nút thực sự "tải ảnh lên". Bọc <input type="file"> (ẩn) bên
-                trong <label> để có nút bấm rõ ràng thay vì input file mặc
-                định của trình duyệt (nhỏ, dễ bị bỏ qua). */}
-            <label
-              className={`inline-flex items-center gap-2 text-sm px-4 py-2 rounded-md transition-colors ${
-                uploading
-                  ? "bg-gray-300 text-gray-500 cursor-not-allowed"
-                  : "bg-gray-900 text-white hover:bg-gray-800 cursor-pointer"
-              }`}
-            >
-              {uploading ? "Đang tải ảnh lên..." : "Tải ảnh lên"}
-              <input
-                type="file"
-                accept="image/*"
-                multiple
-                onChange={handleFiles}
-                disabled={uploading}
-                className="hidden"
-              />
-            </label>
+            {/* 2 nút: "Tải ảnh lên" cho ảnh đã có sẵn trong máy, "Chụp ảnh
+                mới" mở camera ngay trong trang cho ảnh chưa chụp (kèm gợi ý
+                cắt bớt phần thừa hoặc giữ nguyên sau khi chụp — xem
+                CapturePhotoButton.js). Nút "Tải ảnh lên" bọc <input
+                type="file"> (ẩn) bên trong <label> để có nút bấm rõ ràng
+                thay vì input file mặc định của trình duyệt. */}
+            <div className="flex flex-wrap gap-3 mb-1.5">
+              <label
+                className={`inline-flex items-center gap-2 text-sm px-4 py-2 rounded-md transition-colors ${
+                  uploading
+                    ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                    : "bg-gray-900 text-white hover:bg-gray-800 cursor-pointer"
+                }`}
+              >
+                {uploading ? "Đang tải ảnh lên..." : "🖼️ Tải ảnh lên"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={handleFiles}
+                  disabled={uploading}
+                  className="hidden"
+                />
+              </label>
+              <CapturePhotoButton disabled={uploading} onCaptured={handleCapturedImage} />
+            </div>
             <p className="text-xs text-gray-400 mt-1.5 mb-3">
-              Chọn 1 hoặc nhiều ảnh từ máy — ảnh sẽ tự động tải lên. Ảnh quá lớn (trên 1600px
+              Chọn ảnh có sẵn trong máy, hoặc chụp ảnh mới ngay tại đây. Ảnh quá lớn (trên 1600px
               hoặc trên 1.5MB) sẽ được tự động thu nhỏ vừa đủ để hiển thị rõ nét trên trang bán
               hàng, không cần bạn tự chỉnh sửa trước.
             </p>
@@ -336,42 +437,62 @@ export default function NewProductPage() {
 
             {!videoUrl && (
               <>
-                {/* Nút chọn video TỪ MÁY để tải lên Supabase Storage (bucket
-                    "product-videos") — kiểm tra thời lượng/dung lượng ở
-                    trình duyệt TRƯỚC khi tải lên (validateProductVideo),
-                    báo lỗi kèm hướng dẫn cụ thể nếu vượt giới hạn thay vì
-                    tự động nén (xem ghi chú trong src/lib/shops.js). */}
-                <label
-                  className={`inline-flex items-center gap-2 text-sm px-4 py-2 rounded-md transition-colors ${
-                    videoUploading
-                      ? "bg-gray-300 text-gray-500 cursor-not-allowed"
-                      : "bg-gray-900 text-white hover:bg-gray-800 cursor-pointer"
-                  }`}
-                >
-                  {videoUploading ? "Đang tải video lên..." : "Tải video lên"}
-                  <input
-                    type="file"
-                    accept="video/*"
-                    onChange={handleVideoChange}
+                {/* 2 nút: "Tải Video lên" cho video đã có sẵn, "Quay Video
+                    mới" mở camera quay trực tiếp (tự dừng ở
+                    {VIDEO_MAX_SECONDS}s — xem RecordVideoButton.js). Cả 2
+                    đường đều đi qua handleIncomingVideo(): video quá NẶNG
+                    được TỰ ĐỘNG giảm dung lượng, video quá DÀI mở khung cắt
+                    (VideoTrimModal) ngay tại trang — xem ghi chú trong
+                    src/lib/videoProcessing.js. */}
+                <div className="flex flex-wrap gap-3">
+                  <label
+                    className={`inline-flex items-center gap-2 text-sm px-4 py-2 rounded-md transition-colors ${
+                      videoUploading
+                        ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                        : "bg-gray-900 text-white hover:bg-gray-800 cursor-pointer"
+                    }`}
+                  >
+                    {videoUploading ? "Đang xử lý video..." : "🎞️ Tải Video lên"}
+                    <input
+                      type="file"
+                      accept="video/*"
+                      onChange={handleVideoChange}
+                      disabled={videoUploading}
+                      className="hidden"
+                    />
+                  </label>
+                  <RecordVideoButton
                     disabled={videoUploading}
-                    className="hidden"
+                    maxSeconds={VIDEO_MAX_SECONDS}
+                    onRecorded={handleIncomingVideo}
                   />
-                </label>
+                </div>
                 <p className="text-xs text-gray-400 mt-1.5">
-                  Chọn 1 video ngắn giới thiệu sản phẩm (tối đa {VIDEO_MAX_SECONDS} giây, tối đa{" "}
-                  {VIDEO_MAX_BYTES / (1024 * 1024)}MB). Nếu video dài hoặc nặng hơn giới hạn, hệ
-                  thống sẽ báo lỗi kèm hướng dẫn cắt/nén video, không tự động tải lên.
+                  Video tối đa {VIDEO_MAX_SECONDS} giây, tối đa {VIDEO_MAX_BYTES / (1024 * 1024)}MB.
+                  Video quá nặng sẽ được tự động giảm dung lượng; video quá dài sẽ cho bạn chọn
+                  đoạn cần giữ ngay tại đây, không cần dùng ứng dụng khác.
                 </p>
               </>
             )}
             {videoError && <p className="text-xs text-red-600 mt-1.5">{videoError}</p>}
           </div>
 
+          {pendingTrim && (
+            <VideoTrimModal
+              sourceUrl={pendingTrim.url}
+              duration={pendingTrim.duration}
+              maxSeconds={VIDEO_MAX_SECONDS}
+              processing={trimProcessing}
+              onConfirm={handleTrimConfirm}
+              onCancel={handleTrimCancel}
+            />
+          )}
+
           {error && <p className="text-sm text-red-600">{error}</p>}
 
           <button
             type="submit"
-            disabled={submitting || uploading}
+            disabled={submitting || uploading || videoUploading || trimProcessing}
             className="bg-gray-900 text-white py-2.5 rounded-md font-medium hover:bg-gray-800 transition-colors mt-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {submitting ? "Đang kiểm duyệt & tạo sản phẩm..." : "Tạo sản phẩm"}

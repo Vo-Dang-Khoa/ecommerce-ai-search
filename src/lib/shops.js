@@ -89,6 +89,53 @@ export async function resizeImageFile(file) {
 }
 
 /**
+ * Cắt 1 vùng ảnh theo toạ độ pixel (định dạng `{x, y, width, height}` mà
+ * thư viện react-easy-crop trả về qua callback onCropComplete) thành 1
+ * file ảnh JPEG mới — dùng cho tính năng "Cắt ảnh" sau khi chụp ảnh sản
+ * phẩm mới bằng camera (xem CapturePhotoButton.js).
+ *
+ * @param {string} imageUrl - object URL của ảnh gốc (ảnh vừa chụp)
+ * @param {{x:number, y:number, width:number, height:number}} cropPixels
+ * @returns {Promise<File>}
+ */
+export function cropImageToFile(imageUrl, cropPixels) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(cropPixels.width);
+      canvas.height = Math.round(cropPixels.height);
+      canvas
+        .getContext("2d")
+        .drawImage(
+          img,
+          Math.round(cropPixels.x),
+          Math.round(cropPixels.y),
+          Math.round(cropPixels.width),
+          Math.round(cropPixels.height),
+          0,
+          0,
+          Math.round(cropPixels.width),
+          Math.round(cropPixels.height)
+        );
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) {
+            reject(new Error("Không cắt được ảnh, vui lòng thử lại."));
+            return;
+          }
+          resolve(new File([blob], `crop-${Date.now()}.jpg`, { type: "image/jpeg" }));
+        },
+        "image/jpeg",
+        0.92
+      );
+    };
+    img.onerror = () => reject(new Error("Không đọc được ảnh để cắt."));
+    img.src = imageUrl;
+  });
+}
+
+/**
  * Tải 1 file ảnh lên Supabase Storage (bucket "product-images") và trả về
  * URL công khai để lưu vào cột `images` của bảng products.
  *
@@ -115,10 +162,13 @@ export async function uploadProductImage(file, shopId) {
   return data.publicUrl;
 }
 
-// v12: giới hạn video giới thiệu sản phẩm — kiểm tra ở TRÌNH DUYỆT trước
-// khi tải lên, báo lỗi rõ ràng kèm hướng dẫn khắc phục thay vì cố tự động
-// nén video (nén video thật sự trong trình duyệt rất phức tạp, dễ treo máy
-// yếu/trình duyệt cũ — không phù hợp cho đồ án demo cần chạy ổn định).
+// v13: giới hạn video giới thiệu sản phẩm. Video quá NẶNG sẽ được TỰ ĐỘNG
+// giảm dung lượng, video quá DÀI sẽ được người bán CẮT trực tiếp ngay
+// trên trang (chọn đoạn cần giữ) — cả 2 đều xử lý hoàn toàn ở trình duyệt
+// bằng videoProcessing.js (video.captureStream() + MediaRecorder), không
+// cần gửi video lên server. Nếu trình duyệt không hỗ trợ (một số bản
+// Safari cũ), trang /seller/products/new tự quay lại cách cũ: báo lỗi kèm
+// hướng dẫn người bán tự cắt/nén bằng ứng dụng có sẵn trên thiết bị.
 export const VIDEO_MAX_SECONDS = 60;
 export const VIDEO_MAX_BYTES = 20 * 1024 * 1024;
 
@@ -143,47 +193,10 @@ export function readVideoDuration(file) {
 }
 
 /**
- * Kiểm tra 1 file video có nằm trong giới hạn cho phép không — trả về
- * thông báo lỗi kèm hướng dẫn khắc phục cụ thể nếu vượt quá, hoặc null nếu
- * hợp lệ.
- *
- * @param {File} file
- * @returns {Promise<string|null>}
- */
-export async function validateProductVideo(file) {
-  if (file.size > VIDEO_MAX_BYTES) {
-    const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
-    return (
-      `Video nặng ${sizeMb}MB, vượt quá ${VIDEO_MAX_BYTES / (1024 * 1024)}MB cho phép. ` +
-      `Hãy giảm dung lượng trước khi tải lên: dùng ứng dụng cắt/nén video có sẵn trên điện ` +
-      `thoại (giảm độ phân giải hoặc chất lượng), hoặc công cụ nén video miễn phí trên máy tính.`
-    );
-  }
-
-  let duration;
-  try {
-    duration = await readVideoDuration(file);
-  } catch (err) {
-    return err.message;
-  }
-
-  if (duration > VIDEO_MAX_SECONDS) {
-    const seconds = Math.round(duration);
-    return (
-      `Video dài ${seconds} giây, vượt quá ${VIDEO_MAX_SECONDS} giây cho phép. ` +
-      `Hãy cắt bớt video (gợi ý: chỉ giữ lại đoạn giới thiệu sản phẩm rõ nét nhất, khoảng ` +
-      `${VIDEO_MAX_SECONDS} giây đầu) bằng ứng dụng cắt video có sẵn trên điện thoại, rồi tải ` +
-      `lại đoạn đã cắt.`
-    );
-  }
-
-  return null;
-}
-
-/**
  * Tải 1 file video lên Supabase Storage (bucket "product-videos") và trả
- * về URL công khai để lưu vào cột `video_url` của bảng products. Gọi
- * validateProductVideo() TRƯỚC hàm này để chặn video vượt giới hạn.
+ * về URL công khai để lưu vào cột `video_url` của bảng products. Video cần
+ * được xử lý (cắt/nén nếu cần, xem videoProcessing.js) TRƯỚC khi gọi hàm
+ * này, ở component trang /seller/products/new.
  *
  * @param {File} file - file video người dùng chọn từ <input type="file">
  * @param {string} shopId - id gian hàng, dùng để tách thư mục video theo shop
