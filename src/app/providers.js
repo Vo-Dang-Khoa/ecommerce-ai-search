@@ -214,6 +214,25 @@ function AuthProvider({ children }) {
     return { role: wantRole };
   }
 
+  // v14: đăng nhập ADMIN (trang /admin/login) — TÁCH RIÊNG khỏi signIn() ở
+  // trên vì Admin không tham gia cơ chế "1 email chỉ đăng nhập 1 vai trò
+  // buyer/seller tại 1 thời điểm" (active_role chỉ nhận 'buyer'/'seller' —
+  // xem ràng buộc CHECK ở supabase/schema.sql mục 1), nên KHÔNG được đụng
+  // vào active_role. Chỉ đăng nhập thành công nếu profiles.role = 'admin'
+  // (tự nâng quyền qua Supabase Table Editor/SQL Editor — xem hướng dẫn ở
+  // supabase/schema.sql mục 10), ngược lại đăng xuất ngay và báo lỗi.
+  async function signInAdmin({ email, password }) {
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+
+    const profileData = await fetchProfileRow(data.user.id);
+    if (profileData.role !== "admin") {
+      await supabase.auth.signOut();
+      throw new Error("Tài khoản này không có quyền Admin.");
+    }
+    return { role: "admin" };
+  }
+
   // Đăng xuất: giải phóng active_role để tài khoản có thể đăng nhập lại ở
   // vai trò còn lại (từ tab/thiết bị khác) mà không bị hỏi xác nhận. Không
   // chặn đăng xuất nếu ghi thất bại (vd: chưa chạy schema.sql bản mới).
@@ -280,11 +299,18 @@ function AuthProvider({ children }) {
     ? {
         id: session.user.id,
         email: session.user.email,
-        // Vai trò ĐANG đăng nhập của phiên này — ưu tiên active_role (đặt
-        // lúc đăng nhập/đăng ký, xem signIn()/signUp() ở trên), fallback về
-        // role (vai trò đăng ký đầu tiên) cho các phiên cũ trước khi có
-        // active_role, cuối cùng mặc định "buyer".
-        role: profile?.active_role ?? profile?.role ?? "buyer",
+        // Vai trò ĐANG đăng nhập của phiên này — 'admin' LUÔN được ưu tiên
+        // tuyệt đối (Admin không tham gia cơ chế active_role buyer/seller,
+        // xem signInAdmin() ở trên — nếu tài khoản này lỡ có active_role cũ
+        // từ trước khi được nâng lên Admin thì vẫn phải nhận diện đúng là
+        // Admin). Còn lại: ưu tiên active_role (đặt lúc đăng nhập/đăng ký,
+        // xem signIn()/signUp()), fallback về role (vai trò đăng ký đầu
+        // tiên) cho các phiên cũ trước khi có active_role, cuối cùng mặc
+        // định "buyer".
+        role:
+          profile?.role === "admin"
+            ? "admin"
+            : profile?.active_role ?? profile?.role ?? "buyer",
         // Tài khoản đã từng được cấp vai trò Người bán chưa (dùng để hiện
         // gợi ý "đăng nhập bên Người bán" mà không cần đăng ký lại).
         isSeller: !!profile?.is_seller,
@@ -299,6 +325,7 @@ function AuthProvider({ children }) {
         user,
         signUp,
         signIn,
+        signInAdmin,
         logout,
         updateProfile,
         updateEmail,
@@ -401,6 +428,28 @@ function mapBanner(row, shopName) {
   };
 }
 
+// v14: chuyển 1 dòng bảng `category_promotions` thành object camelCase cho
+// UI (PromotionBanner.js, PromotionHeroBanner.js, trang /admin) dùng —
+// `categoryName` được ghép thêm từ bảng categories (không có cột riêng ở
+// category_promotions). Trạng thái Sắp diễn ra/Đang diễn ra KHÔNG map ở đây
+// — luôn tính trực tiếp từ startAt/endAt lúc hiển thị (xem
+// src/lib/promotions.js), tránh lệch dữ liệu.
+function mapPromotion(row, categoryName) {
+  return {
+    id: row.id,
+    categoryId: row.category_id,
+    categoryName: categoryName || "",
+    title: row.title,
+    subtitle: row.subtitle || "",
+    imageUrl: row.image_url,
+    linkUrl: row.link_url || "",
+    theme: row.theme || "amber",
+    startAt: row.start_at,
+    endAt: row.end_at,
+    active: row.active,
+  };
+}
+
 function ShopProvider({ children }) {
   const { user } = useAuth();
   const [shops, setShops] = useState([]);
@@ -412,6 +461,10 @@ function ShopProvider({ children }) {
   // v13: banner quảng cáo theo gian hàng (xem supabase/schema.sql mục 5D và
   // src/lib/banners.js) — mỗi phần tử là 1 banner (tối đa 1/gian hàng).
   const [banners, setBanners] = useState([]);
+  // v14: khuyến mãi THEO NGÀNH HÀNG, do Admin quản lý (xem
+  // supabase/schema.sql mục 10 và src/lib/promotions.js) — mỗi phần tử là 1
+  // khuyến mãi (tối đa 1/ngành hàng).
+  const [categoryPromotions, setCategoryPromotions] = useState([]);
   const [hydrated, setHydrated] = useState(false);
   const [loadError, setLoadError] = useState("");
 
@@ -424,31 +477,46 @@ function ShopProvider({ children }) {
 
     async function loadFromSupabase() {
       try {
-        const [shopsRes, productsRes, categoriesRes, categoryAttrsRes, bannersRes] =
-          await Promise.all([
-            supabase.from("shops").select("*").order("created_at", { ascending: true }),
-            supabase.from("products").select("*").order("created_at", { ascending: true }),
-            supabase.from("categories").select("*").order("sort_order", { ascending: true }),
-            supabase
-              .from("category_attributes")
-              .select("*")
-              .order("sort_order", { ascending: true }),
-            // v13: xem mục 5D trong supabase/schema.sql — bảng có thể chưa tồn
-            // tại nếu project chưa chạy bản schema mới nhất, xử lý như
-            // categories/category_attributes bên dưới (chỉ cảnh báo, không throw).
-            supabase
-              .from("shop_banners")
-              .select("*")
-              .order("created_at", { ascending: false }),
-          ]);
+        const [
+          shopsRes,
+          productsRes,
+          categoriesRes,
+          categoryAttrsRes,
+          bannersRes,
+          promotionsRes,
+        ] = await Promise.all([
+          supabase.from("shops").select("*").order("created_at", { ascending: true }),
+          supabase.from("products").select("*").order("created_at", { ascending: true }),
+          supabase.from("categories").select("*").order("sort_order", { ascending: true }),
+          supabase
+            .from("category_attributes")
+            .select("*")
+            .order("sort_order", { ascending: true }),
+          // v13: xem mục 5D trong supabase/schema.sql — bảng có thể chưa tồn
+          // tại nếu project chưa chạy bản schema mới nhất, xử lý như
+          // categories/category_attributes bên dưới (chỉ cảnh báo, không throw).
+          supabase
+            .from("shop_banners")
+            .select("*")
+            .order("created_at", { ascending: false }),
+          // v14: xem mục 10 trong supabase/schema.sql. RLS tự trả về TOÀN BỘ
+          // (kể cả khuyến mãi đang tắt) nếu người đang đăng nhập là Admin,
+          // ngược lại chỉ trả về khuyến mãi active = true — xem policy
+          // "Admin can read all category promotions"/"Public can read active
+          // category promotions".
+          supabase
+            .from("category_promotions")
+            .select("*")
+            .order("created_at", { ascending: false }),
+        ]);
 
         if (shopsRes.error) throw shopsRes.error;
         if (productsRes.error) throw productsRes.error;
-        // categories/category_attributes/shop_banners: KHÔNG throw nếu lỗi
-        // (vd: project chưa chạy supabase/schema.sql bản mới nhất, các bảng
-        // này chưa tồn tại) — chỉ cảnh báo, để app vẫn chạy được (Sidebar/bộ
-        // lọc danh mục, banner quảng cáo chỉ đơn giản là rỗng) thay vì sập
-        // toàn bộ trang.
+        // categories/category_attributes/shop_banners/category_promotions:
+        // KHÔNG throw nếu lỗi (vd: project chưa chạy supabase/schema.sql bản
+        // mới nhất, các bảng này chưa tồn tại) — chỉ cảnh báo, để app vẫn
+        // chạy được (Sidebar/bộ lọc danh mục, banner quảng cáo/khuyến mãi chỉ
+        // đơn giản là rỗng) thay vì sập toàn bộ trang.
         if (categoriesRes.error) {
           console.warn(
             "[ShopProvider] Không tải được bảng categories (có thể project chưa chạy " +
@@ -469,17 +537,31 @@ function ShopProvider({ children }) {
             bannersRes.error
           );
         }
+        if (promotionsRes.error) {
+          console.warn(
+            "[ShopProvider] Không tải được bảng category_promotions (có thể project chưa " +
+              "chạy supabase/schema.sql bản v14 mới nhất):",
+            promotionsRes.error
+          );
+        }
         if (cancelled) return;
 
         const shopRows = shopsRes.data || [];
         const shopNameById = new Map(shopRows.map((s) => [s.id, s.name]));
+        const categoryRows = categoriesRes.data || [];
+        const categoryNameById = new Map(categoryRows.map((c) => [c.id, c.name]));
 
         setShops(shopRows.map(mapShop));
         setSellerProducts((productsRes.data || []).map(mapProduct));
-        setCategories((categoriesRes.data || []).map(mapCategory));
+        setCategories(categoryRows.map(mapCategory));
         setCategoryAttributes((categoryAttrsRes.data || []).map(mapCategoryAttribute));
         setBanners(
           (bannersRes.data || []).map((row) => mapBanner(row, shopNameById.get(row.shop_id)))
+        );
+        setCategoryPromotions(
+          (promotionsRes.data || []).map((row) =>
+            mapPromotion(row, categoryNameById.get(row.category_id))
+          )
         );
       } catch (err) {
         if (!cancelled) {
@@ -707,6 +789,57 @@ function ShopProvider({ children }) {
     setBanners((prev) => prev.filter((b) => b.shopId !== myShop.id));
   }
 
+  // v14: tạo/sửa khuyến mãi của 1 ngành hàng bằng upsert theo category_id
+  // (bảng category_promotions có ràng buộc unique(category_id) — xem
+  // supabase/schema.sql mục 10), giống cơ chế saveBanner() ở trên. CHỈ Admin
+  // gọi được — Postgres RLS chặn ở tầng dưới nếu không phải Admin, kiểm tra
+  // thêm ở đây chỉ để báo lỗi tiếng Việt dễ hiểu hơn cho trang /admin.
+  async function savePromotion(
+    categoryId,
+    { title, subtitle = "", imageUrl, linkUrl = "", theme = "amber", startAt, endAt, active = true }
+  ) {
+    if (user?.role !== "admin") throw new Error("Bạn cần đăng nhập bằng tài khoản Admin.");
+    const { data, error } = await supabase
+      .from("category_promotions")
+      .upsert(
+        {
+          category_id: categoryId,
+          title,
+          subtitle: subtitle || "",
+          image_url: imageUrl,
+          link_url: linkUrl || "",
+          theme: theme || "amber",
+          start_at: startAt,
+          end_at: endAt,
+          active,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "category_id" }
+      )
+      .select()
+      .single();
+    if (error) throw error;
+
+    const categoryName = categories.find((c) => c.id === categoryId)?.name;
+    const promotion = mapPromotion(data, categoryName);
+    setCategoryPromotions((prev) => {
+      const rest = prev.filter((p) => p.categoryId !== categoryId);
+      return [promotion, ...rest];
+    });
+    return promotion;
+  }
+
+  async function deletePromotion(categoryId) {
+    if (user?.role !== "admin") throw new Error("Bạn cần đăng nhập bằng tài khoản Admin.");
+    const { error } = await supabase
+      .from("category_promotions")
+      .delete()
+      .eq("category_id", categoryId);
+    if (error) throw error;
+
+    setCategoryPromotions((prev) => prev.filter((p) => p.categoryId !== categoryId));
+  }
+
   const myShopProducts = myShop
     ? sellerProducts.filter((p) => p.shopId === myShop.id)
     : [];
@@ -737,10 +870,13 @@ function ShopProvider({ children }) {
         categoryAttributes,
         banners,
         myBanner,
+        categoryPromotions,
         registerShop,
         updateShop,
         saveBanner,
         deleteBanner,
+        savePromotion,
+        deletePromotion,
         addProduct,
         removeProduct,
         updateProduct,

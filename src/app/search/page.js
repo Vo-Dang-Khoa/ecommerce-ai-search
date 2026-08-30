@@ -4,11 +4,16 @@ import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import ProductCard from "../components/ProductCard";
 
+// Ví dụ trải đều vài ngành hàng khác nhau (không chỉ bánh) — phản ánh đúng
+// phạm vi 12 ngành hàng hiện có của web (xem supabase/schema.sql mục 9),
+// giúp người dùng biết AI tìm được nhiều loại sản phẩm chứ không riêng bánh.
 const SUGGESTIONS = [
   "Bánh sinh nhật ngọt nhẹ cho tiệc nhỏ 5 người",
   "Món ăn sáng nhanh, giòn, thơm bơ",
   "Bánh làm quà tặng dịp Trung thu",
-  "Bánh ít ngọt, hợp người ăn kiêng đường",
+  "Áo khoác nam giữ ấm mùa đông",
+  "Balo laptop gọn nhẹ đi học",
+  "Kem dưỡng da mặt cho da nhạy cảm",
 ];
 
 function SearchPageInner() {
@@ -77,11 +82,11 @@ function SearchPageInner() {
             🤖 Tìm kiếm bằng AI
           </span>
           <h1 className="text-3xl font-bold text-gray-900 mt-4">
-            Mô tả bánh bạn cần, AI sẽ gợi ý giúp bạn
+            Mô tả sản phẩm bạn cần, AI sẽ gợi ý giúp bạn
           </h1>
           <p className="text-gray-600 mt-2">
             Ví dụ: &quot;bánh sinh nhật ngọt nhẹ cho tiệc nhỏ&quot; hoặc
-            &quot;quà tặng dịp Trung thu&quot;
+            &quot;áo khoác nam giữ ấm mùa đông&quot;
           </p>
         </div>
 

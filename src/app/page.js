@@ -1,6 +1,7 @@
 import Link from "next/link";
 import RecommendedForYou from "./components/RecommendedForYou";
 import AdSlot from "./components/AdSlot";
+import HeroSection from "./components/HeroSection";
 
 const categories = [
   {
@@ -66,37 +67,12 @@ const features = [
 export default function Home() {
   return (
     <main className="flex-1 bg-white">
-      {/* Hero */}
-      <section className="bg-gradient-to-b from-amber-50 to-white">
-        <div className="max-w-7xl mx-auto px-4 py-20 flex flex-col items-center text-center gap-6">
-          <span className="text-sm font-medium text-amber-700 bg-amber-100 px-3 py-1 rounded-full">
-            Tiệm bánh trực tuyến #1 với tìm kiếm AI
-          </span>
-          <h1 className="text-4xl sm:text-5xl font-bold text-gray-900 max-w-2xl leading-tight">
-            Bánh ngon mỗi ngày,
-            <br />
-            ngọt ngào từng khoảnh khắc
-          </h1>
-          <p className="text-lg text-gray-600 max-w-xl">
-            Từ bánh sinh nhật, bánh kem cho đến bánh mì mỗi sáng — chọn đúng
-            loại bánh bạn thích chỉ trong vài giây nhờ trợ lý tìm kiếm AI.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 mt-2">
-            <Link
-              href="/products"
-              className="bg-gray-900 text-white px-6 py-3 rounded-md font-medium hover:bg-gray-800 transition-colors"
-            >
-              Khám phá sản phẩm
-            </Link>
-            <Link
-              href="/search"
-              className="border border-gray-300 text-gray-900 px-6 py-3 rounded-md font-medium hover:bg-gray-50 transition-colors"
-            >
-              Tìm kiếm bằng AI
-            </Link>
-          </div>
-        </div>
-      </section>
+      {/* Banner đầu trang — luân phiên khuyến mãi "Sắp diễn ra"/"Đang diễn
+          ra" của các ngành hàng (Admin quản lý ở /admin), tự quay lại nội
+          dung giới thiệu tĩnh nếu chưa có khuyến mãi nào — xem
+          HeroSection.js. 2 nút "Khám phá sản phẩm"/"Tìm kiếm AI" nằm NGAY
+          DƯỚI banner, không đổi theo trạng thái khuyến mãi. */}
+      <HeroSection />
 
       {/* Gợi ý dành cho bạn — cá nhân hoá theo lịch sử mua hàng/xem sản
           phẩm (rule-based, không dùng AI — xem src/lib/recommendations.js).

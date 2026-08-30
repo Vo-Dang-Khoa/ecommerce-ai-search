@@ -1,8 +1,14 @@
--- ShopAI (ecommerce-ai-search) — Supabase schema (v13: thêm bảng
--- shop_banners + bucket Storage "shop-banners" — mỗi gian hàng tự tạo 1
--- banner quảng cáo, hiển thị luân phiên ở nhiều trang của web — xem mục 5D).
+-- ShopAI (ecommerce-ai-search) — Supabase schema (v14: thêm bảng
+-- category_promotions + bucket Storage "category-promotions" — chương
+-- trình khuyến mãi THEO NGÀNH HÀNG (12 danh mục cha), CHỈ ADMIN tạo/sửa/
+-- xoá được, hiển thị luân phiên "Sắp diễn ra"/"Đang diễn ra" ở banner trang
+-- chủ + banner riêng cho từng ngành hàng ở trang /products — xem mục 10 và
+-- src/lib/promotions.js; products.category_id cũng được dùng thật ở trang
+-- /seller/products/new (chọn Ngành hàng -> Danh mục con) kể từ bản này).
 --
--- Lịch sử: v12 thêm cột products.video_url + bucket Storage
+-- Lịch sử: v13 thêm bảng shop_banners + bucket Storage "shop-banners" — mỗi
+-- gian hàng tự tạo 1 banner quảng cáo, hiển thị luân phiên ở nhiều trang của
+-- web (mục 5D); v12 thêm cột products.video_url + bucket Storage
 -- "product-videos", cho phép người bán đính kèm 1 video giới thiệu sản
 -- phẩm (mục 3 và mục 5B); v11 thêm cột lưu vết kiểm duyệt nội dung sản phẩm bằng AI —
 -- products.moderation_status/moderation_reason (xem mục 3 gần cuối file +
@@ -23,8 +29,8 @@
 -- mình; v4 thêm Supabase Auth thật + phân vai trò + số điện thoại/địa chỉ
 -- giao hàng + bảng orders/order_items.
 --
--- File này AN TOÀN để chạy lại (idempotent). Nếu bạn đã chạy bản v1-v12 trước
--- đó, chỉ cần chạy lại TOÀN BỘ file v13 này thêm 1 lần — nó tự thêm/sửa
+-- File này AN TOÀN để chạy lại (idempotent). Nếu bạn đã chạy bản v1-v13 trước
+-- đó, chỉ cần chạy lại TOÀN BỘ file v14 này thêm 1 lần — nó tự thêm/sửa
 -- bảng/cột/policy/danh mục, không xoá dữ liệu tài khoản/gian hàng/sản
 -- phẩm/danh mục đã có.
 --
@@ -675,3 +681,116 @@ from categories c
 where p.category_id is null
   and c.parent_id is not null
   and c.name = p.category;
+
+-- ============================================================
+-- 10. v14 — category_promotions: chương trình khuyến mãi THEO NGÀNH HÀNG
+--     (banner luân phiên "Sắp diễn ra"/"Đang diễn ra" ở trang chủ + banner
+--     riêng cho từng ngành hàng ở trang /products) — CHỈ ADMIN được tạo/
+--     sửa/xoá (khác với shop_banners ở mục 5D, do NGƯỜI BÁN tự quản lý cho
+--     gian hàng của mình). App hiện CHƯA có trang đăng ký Admin công khai
+--     (tránh ai cũng tự phong Admin được) — tự nâng 1 tài khoản ĐÃ ĐĂNG KÝ
+--     (buyer hoặc seller) lên Admin bằng cách chạy lệnh sau trong SQL Editor
+--     (thay đúng email tài khoản của bạn):
+--       update profiles set role = 'admin' where email = 'adminkhoavo@gmail.com';
+--     Sau đó đăng nhập Admin tại /admin/login bằng đúng email + mật khẩu đó
+--     (KHÁC trang /login của Người mua/Người bán).
+--
+--     Trạng thái Sắp diễn ra / Đang diễn ra / Đã kết thúc được TÍNH TỰ ĐỘNG
+--     ở phía frontend (xem src/lib/promotions.js) dựa trên start_at/end_at,
+--     KHÔNG lưu thành 1 cột trạng thái riêng (tránh lệch dữ liệu nếu Admin
+--     quên cập nhật) — Admin chỉ cần nhập đúng 2 mốc thời gian bắt đầu/kết
+--     thúc, hệ thống tự suy ra trạng thái mỗi lần hiển thị.
+--
+--     Mỗi ngành hàng (category_id) chỉ có TỐI ĐA 1 khuyến mãi tại 1 thời
+--     điểm (unique (category_id), tạo/sửa qua upsert ở /admin) — giống mô
+--     hình 1 banner/gian hàng của shop_banners.
+-- ============================================================
+create table if not exists category_promotions (
+  id uuid primary key default gen_random_uuid(),
+  category_id uuid not null unique references categories (id) on delete cascade,
+  title text not null,
+  subtitle text not null default '',
+  image_url text not null,
+  link_url text not null default '',
+  theme text not null default 'amber'
+    check (theme in ('amber', 'rose', 'emerald', 'sky', 'slate')),
+  start_at timestamptz not null,
+  end_at timestamptz not null,
+  active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists category_promotions_active_idx
+  on category_promotions (active);
+
+alter table category_promotions enable row level security;
+
+-- Khách (kể cả chưa đăng nhập) đọc được TẤT CẢ khuyến mãi đang active = true
+-- — lọc "sắp diễn ra/đang diễn ra/đã kết thúc" theo ngày làm ở FRONTEND (xem
+-- src/lib/promotions.js), KHÔNG lọc bằng RLS (so sánh now() theo đúng múi
+-- giờ hiển thị ở client nhất quán hơn là tính lại ở Postgres).
+drop policy if exists "Public can read active category promotions" on category_promotions;
+create policy "Public can read active category promotions" on category_promotions
+  for select using (active = true);
+
+-- CHỈ Admin (profiles.role = 'admin') mới xem được TOÀN BỘ (kể cả đang tắt)
+-- và được thêm/sửa/xoá. Subquery chỉ đọc đúng dòng profiles của CHÍNH mình
+-- (auth.uid() = id) nên không bị policy "Users can read own profile" (mục 1)
+-- chặn lại.
+drop policy if exists "Admin can read all category promotions" on category_promotions;
+create policy "Admin can read all category promotions" on category_promotions
+  for select using (
+    exists (select 1 from profiles where id = auth.uid() and role = 'admin')
+  );
+
+drop policy if exists "Admin can insert category promotions" on category_promotions;
+create policy "Admin can insert category promotions" on category_promotions
+  for insert with check (
+    exists (select 1 from profiles where id = auth.uid() and role = 'admin')
+  );
+
+drop policy if exists "Admin can update category promotions" on category_promotions;
+create policy "Admin can update category promotions" on category_promotions
+  for update using (
+    exists (select 1 from profiles where id = auth.uid() and role = 'admin')
+  );
+
+drop policy if exists "Admin can delete category promotions" on category_promotions;
+create policy "Admin can delete category promotions" on category_promotions
+  for delete using (
+    exists (select 1 from profiles where id = auth.uid() and role = 'admin')
+  );
+
+-- Storage bucket lưu ẢNH banner khuyến mãi — CHỈ Admin được ghi (khác bucket
+-- "shop-banners" ở mục 5D, cho phép mọi Người bán ghi vào thư mục gian hàng
+-- mình). Bucket vẫn public = true để ảnh hiển thị công khai cho mọi khách ở
+-- trang chủ/trang sản phẩm.
+insert into storage.buckets (id, name, public, file_size_limit)
+values ('category-promotions', 'category-promotions', true, 5242880)
+on conflict (id) do update set public = excluded.public, file_size_limit = excluded.file_size_limit;
+
+drop policy if exists "Public can view category promotion images" on storage.objects;
+create policy "Public can view category promotion images" on storage.objects
+  for select using (bucket_id = 'category-promotions');
+
+drop policy if exists "Admin can upload category promotion images" on storage.objects;
+create policy "Admin can upload category promotion images" on storage.objects
+  for insert with check (
+    bucket_id = 'category-promotions'
+    and exists (select 1 from profiles where id = auth.uid() and role = 'admin')
+  );
+
+drop policy if exists "Admin can update category promotion images" on storage.objects;
+create policy "Admin can update category promotion images" on storage.objects
+  for update using (
+    bucket_id = 'category-promotions'
+    and exists (select 1 from profiles where id = auth.uid() and role = 'admin')
+  );
+
+drop policy if exists "Admin can delete category promotion images" on storage.objects;
+create policy "Admin can delete category promotion images" on storage.objects
+  for delete using (
+    bucket_id = 'category-promotions'
+    and exists (select 1 from profiles where id = auth.uid() and role = 'admin')
+  );

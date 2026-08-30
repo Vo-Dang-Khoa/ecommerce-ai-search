@@ -25,3 +25,9 @@ export const PRODUCT_VIDEOS_BUCKET = "product-videos";
 // v13: tên bucket lưu ảnh banner quảng cáo của gian hàng — phải trùng với
 // id bucket "shop-banners" được tạo trong supabase/schema.sql (mục 5D).
 export const SHOP_BANNERS_BUCKET = "shop-banners";
+
+// v14: tên bucket lưu ảnh banner khuyến mãi THEO NGÀNH HÀNG (do Admin quản
+// lý ở /admin, khác với SHOP_BANNERS_BUCKET do người bán tự quản lý) — phải
+// trùng với id bucket "category-promotions" được tạo trong
+// supabase/schema.sql (mục 10).
+export const PROMOTIONS_BUCKET = "category-promotions";

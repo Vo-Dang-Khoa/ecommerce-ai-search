@@ -3,6 +3,7 @@ import {
   PRODUCT_IMAGES_BUCKET,
   PRODUCT_VIDEOS_BUCKET,
   SHOP_BANNERS_BUCKET,
+  PROMOTIONS_BUCKET,
 } from "./supabaseClient";
 
 export function genId(prefix) {
@@ -249,5 +250,35 @@ export async function uploadShopBanner(file, shopId) {
   }
 
   const { data } = supabase.storage.from(SHOP_BANNERS_BUCKET).getPublicUrl(path);
+  return data.publicUrl;
+}
+
+// v14: banner khuyến mãi THEO NGÀNH HÀNG, do Admin quản lý ở /admin (xem
+// supabase/schema.sql mục 10 và src/lib/promotions.js) — dùng LẠI đúng
+// pipeline resize/crop ở trên (chỉ khác bucket lưu trữ), giống cách
+// uploadShopBanner() tái dùng cho banner gian hàng.
+
+/**
+ * Tải 1 file ảnh khuyến mãi lên Supabase Storage (bucket
+ * "category-promotions") và trả về URL công khai để lưu vào cột `image_url`
+ * của bảng category_promotions.
+ *
+ * @param {File} file - file ảnh đã qua resize/crop
+ * @param {string} categoryId - id ngành hàng, dùng để tách thư mục ảnh
+ * @returns {Promise<string>} URL công khai của ảnh vừa upload
+ */
+export async function uploadCategoryPromotionImage(file, categoryId) {
+  const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+  const path = `${categoryId}/${genId("promo")}.${ext}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from(PROMOTIONS_BUCKET)
+    .upload(path, file, { cacheControl: "3600", upsert: false });
+
+  if (uploadError) {
+    throw new Error(`Tải ảnh khuyến mãi lên Supabase thất bại: ${uploadError.message}`);
+  }
+
+  const { data } = supabase.storage.from(PROMOTIONS_BUCKET).getPublicUrl(path);
   return data.publicUrl;
 }
