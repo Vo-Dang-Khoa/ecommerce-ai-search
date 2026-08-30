@@ -7,7 +7,7 @@ import { NextResponse } from "next/server";
 import { checkRateLimit, getClientIp } from "@/lib/security";
 
 // Model miễn phí (free tier, không cần thẻ) — xem chi tiết ở .env.local.example.
-const GEMINI_MODEL = "gemini-2.5-flash";
+const GEMINI_MODEL = "gemini-3.6-flash";
 
 const MODERATION_SCHEMA = {
   type: "object",
@@ -102,16 +102,16 @@ export async function POST(request) {
       reason: parsed.reason || "",
     });
   } catch (error) {
-    // TODO (tạm thời, để debug): in lỗi thật ra Vercel Logs + gửi kèm
-    // "debug" trong response — SẼ XOÁ dòng debug này sau khi xác định xong
-    // nguyên nhân của lỗi Gemini đang gặp.
+    // Vẫn ghi log lỗi thật ra Vercel Logs để dễ tra cứu sau này (nếu Google
+    // lại đổi model/API) — nhưng không lộ chi tiết kỹ thuật ra cho người
+    // dùng cuối nữa (đã xác định xong nguyên nhân ban đầu: model cũ bị Google
+    // ngừng hỗ trợ, đã đổi sang GEMINI_MODEL mới ở đầu file).
     console.error(
       "[api/moderate-product] Gemini error:",
       error?.name,
       error?.status,
       error?.message
     );
-    const debugDetail = error?.message || String(error);
 
     // Lỗi gọi AI (hết hạn key, quá tải, mất mạng...) -> trả lỗi rõ ràng để
     // moderateProductContent() (src/lib/security.js) tự FAIL OPEN, không
@@ -131,12 +131,12 @@ export async function POST(request) {
         );
       }
       return NextResponse.json(
-        { error: `Không thể kết nối tới dịch vụ AI. (debug: ${debugDetail})` },
+        { error: "Không thể kết nối tới dịch vụ AI." },
         { status: 502 }
       );
     }
     return NextResponse.json(
-      { error: `Dịch vụ kiểm duyệt AI đang gặp sự cố. (debug: ${debugDetail})` },
+      { error: "Dịch vụ kiểm duyệt AI đang gặp sự cố." },
       { status: 502 }
     );
   }

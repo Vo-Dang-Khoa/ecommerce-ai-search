@@ -14,7 +14,7 @@ import { PAYMENT_METHODS, SHIPPING_METHODS } from "@/lib/orderOptions";
 import { checkRateLimit, getClientIp } from "@/lib/security";
 
 // Model miễn phí (free tier, không cần thẻ) — xem chi tiết ở .env.local.example.
-const GEMINI_MODEL = "gemini-2.5-flash";
+const GEMINI_MODEL = "gemini-3.6-flash";
 
 const MAX_HISTORY_MESSAGES = 12;
 const MAX_MESSAGE_LENGTH = 500;
@@ -245,11 +245,11 @@ export async function POST(request) {
     const reply = response.text?.trim() || "Xin lỗi, mình chưa trả lời được câu này.";
     return NextResponse.json({ reply });
   } catch (error) {
-    // TODO (tạm thời, để debug): in lỗi thật ra Vercel Logs + gửi kèm
-    // "debug" trong response — SẼ XOÁ dòng debug này sau khi xác định xong
-    // nguyên nhân của lỗi Gemini đang gặp.
+    // Vẫn ghi log lỗi thật ra Vercel Logs để dễ tra cứu sau này (nếu Google
+    // lại đổi model/API) — nhưng không lộ chi tiết kỹ thuật ra cho người
+    // dùng cuối nữa (đã xác định xong nguyên nhân ban đầu: model cũ bị Google
+    // ngừng hỗ trợ, đã đổi sang GEMINI_MODEL mới ở đầu file).
     console.error("[api/chat] Gemini error:", error?.name, error?.status, error?.message);
-    const debugDetail = error?.message || String(error);
 
     // SDK Gemini gom lỗi API vào 1 class ApiError duy nhất (khác Anthropic có
     // nhiều class riêng) — phân biệt loại lỗi qua error.status (mã HTTP).
@@ -268,12 +268,12 @@ export async function POST(request) {
         );
       }
       return NextResponse.json(
-        { error: `Dịch vụ AI đang gặp sự cố, vui lòng thử lại. (debug: ${debugDetail})` },
+        { error: "Dịch vụ AI đang gặp sự cố, vui lòng thử lại." },
         { status: 502 }
       );
     }
     return NextResponse.json(
-      { error: `Có lỗi không xác định khi trò chuyện với AI. (debug: ${debugDetail})` },
+      { error: "Có lỗi không xác định khi trò chuyện với AI." },
       { status: 500 }
     );
   }

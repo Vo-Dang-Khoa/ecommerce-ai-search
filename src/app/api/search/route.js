@@ -4,7 +4,7 @@ import { PRODUCTS } from "@/lib/products";
 import { checkRateLimit, getClientIp } from "@/lib/security";
 
 // Model miễn phí (free tier, không cần thẻ) — xem chi tiết ở .env.local.example.
-const GEMINI_MODEL = "gemini-2.5-flash";
+const GEMINI_MODEL = "gemini-3.6-flash";
 
 const MATCH_SCHEMA = {
   type: "object",
@@ -118,11 +118,11 @@ export async function POST(request) {
 
     return NextResponse.json({ matches });
   } catch (error) {
-    // TODO (tạm thời, để debug): in lỗi thật ra Vercel Logs + gửi kèm
-    // "debug" trong response để thấy nguyên nhân chính xác trên chính giao
-    // diện lỗi — SẼ XOÁ dòng debug này sau khi xác định xong nguyên nhân.
+    // Vẫn ghi log lỗi thật ra Vercel Logs để dễ tra cứu sau này (nếu Google
+    // lại đổi model/API) — nhưng không lộ chi tiết kỹ thuật ra cho người
+    // dùng cuối nữa (đã xác định xong nguyên nhân ban đầu: model cũ bị Google
+    // ngừng hỗ trợ, đã đổi sang GEMINI_MODEL mới ở đầu file).
     console.error("[api/search] Gemini error:", error?.name, error?.status, error?.message);
-    const debugDetail = error?.message || String(error);
 
     // SDK Gemini gom lỗi API vào 1 class ApiError duy nhất (khác Anthropic có
     // nhiều class riêng) — phân biệt loại lỗi qua error.status (mã HTTP).
@@ -130,7 +130,7 @@ export async function POST(request) {
       const status = error.status;
       if (status === 400) {
         return NextResponse.json(
-          { error: `Yêu cầu gửi tới AI không hợp lệ. (debug: ${debugDetail})` },
+          { error: "Yêu cầu gửi tới AI không hợp lệ." },
           { status: 400 }
         );
       }
@@ -147,12 +147,12 @@ export async function POST(request) {
         );
       }
       return NextResponse.json(
-        { error: `Dịch vụ AI đang gặp sự cố, vui lòng thử lại. (debug: ${debugDetail})` },
+        { error: "Dịch vụ AI đang gặp sự cố, vui lòng thử lại." },
         { status: 502 }
       );
     }
     return NextResponse.json(
-      { error: `Có lỗi không xác định khi tìm kiếm bằng AI. (debug: ${debugDetail})` },
+      { error: "Có lỗi không xác định khi tìm kiếm bằng AI." },
       { status: 500 }
     );
   }
