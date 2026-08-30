@@ -425,6 +425,10 @@ function mapBanner(row, shopName) {
     linkUrl: row.link_url || "",
     theme: row.theme || "amber",
     active: row.active,
+    // v15: trạng thái duyệt của Admin — xem supabase/schema.sql mục 11.
+    reviewStatus: row.review_status || "draft",
+    reviewNote: row.review_note || "",
+    reviewedAt: row.reviewed_at || null,
   };
 }
 
@@ -752,23 +756,39 @@ function ShopProvider({ children }) {
   // shop_id (bảng shop_banners có ràng buộc unique(shop_id) — xem
   // supabase/schema.sql mục 5D), nên vừa dùng được để TẠO MỚI lẫn CẬP NHẬT
   // banner đã có mà không cần biết trước banner đó đã tồn tại hay chưa.
-  async function saveBanner({ title, subtitle = "", imageUrl, linkUrl = "", theme = "amber", active = true }) {
+  //
+  // v15: `reviewStatus` CHỈ được đưa vào payload khi được truyền rõ ràng
+  // (khác undefined) — để việc "Lưu banner" (sửa tiêu đề/ảnh...) hay bật/
+  // tắt hiển thị (handleToggleActive) KHÔNG vô tình ghi đè trạng thái duyệt
+  // hiện tại. Nút "Chạy quảng cáo" ở BannerManager.js gọi hàm này với
+  // reviewStatus: "pending" để chủ động gửi duyệt. Dù JS gửi gì thì trigger
+  // shop_banners_guard_review (mục 11) vẫn là lớp chặn CUỐI CÙNG ở server —
+  // người bán không thể tự đặt "approved" dù có sửa code frontend.
+  async function saveBanner({
+    title,
+    subtitle = "",
+    imageUrl,
+    linkUrl = "",
+    theme = "amber",
+    active = true,
+    reviewStatus,
+  }) {
     if (!myShop) throw new Error("Bạn cần đăng ký gian hàng trước.");
+    const payload = {
+      shop_id: myShop.id,
+      title,
+      subtitle: subtitle || "",
+      image_url: imageUrl,
+      link_url: linkUrl || "",
+      theme: theme || "amber",
+      active,
+      updated_at: new Date().toISOString(),
+    };
+    if (reviewStatus !== undefined) payload.review_status = reviewStatus;
+
     const { data, error } = await supabase
       .from("shop_banners")
-      .upsert(
-        {
-          shop_id: myShop.id,
-          title,
-          subtitle: subtitle || "",
-          image_url: imageUrl,
-          link_url: linkUrl || "",
-          theme: theme || "amber",
-          active,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "shop_id" }
-      )
+      .upsert(payload, { onConflict: "shop_id" })
       .select()
       .single();
     if (error) throw error;
@@ -787,6 +807,39 @@ function ShopProvider({ children }) {
     if (error) throw error;
 
     setBanners((prev) => prev.filter((b) => b.shopId !== myShop.id));
+  }
+
+  // v15: Admin chấp nhận/từ chối/yêu cầu chỉnh sửa 1 banner ở trang
+  // /admin/banners — CHỈ Admin gọi được (kiểm tra ở đây để báo lỗi tiếng
+  // Việt dễ hiểu, RLS + trigger shop_banners_guard_review ở mục 11 vẫn là
+  // lớp chặn thật sự ở server). `note` là lý do/hướng dẫn chỉnh sửa, hiển
+  // thị lại cho người bán ở /seller khi status là "rejected" hoặc
+  // "changes_requested".
+  async function reviewShopBanner(bannerId, { status, note = "" }) {
+    if (user?.role !== "admin") throw new Error("Bạn cần đăng nhập bằng tài khoản Admin.");
+    if (!["approved", "rejected", "changes_requested"].includes(status)) {
+      throw new Error("Trạng thái duyệt không hợp lệ.");
+    }
+
+    const { data, error } = await supabase
+      .from("shop_banners")
+      .update({
+        review_status: status,
+        review_note: note || "",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", bannerId)
+      .select()
+      .single();
+    if (error) throw error;
+
+    const shopName = shops.find((s) => s.id === data.shop_id)?.name || "";
+    const banner = mapBanner(data, shopName);
+    setBanners((prev) => {
+      const rest = prev.filter((b) => b.id !== banner.id);
+      return [banner, ...rest];
+    });
+    return banner;
   }
 
   // v14: tạo/sửa khuyến mãi của 1 ngành hàng bằng upsert theo category_id
@@ -875,6 +928,7 @@ function ShopProvider({ children }) {
         updateShop,
         saveBanner,
         deleteBanner,
+        reviewShopBanner,
         savePromotion,
         deletePromotion,
         addProduct,

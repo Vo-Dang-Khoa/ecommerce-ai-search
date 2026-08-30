@@ -57,6 +57,13 @@ export default function AdminPage() {
           </button>
         </div>
 
+        <Link
+          href="/admin/banners"
+          className="inline-block text-sm text-gray-600 hover:text-gray-900 underline mb-8"
+        >
+          Duyệt banner quảng cáo gian hàng →
+        </Link>
+
         {roots.length === 0 ? (
           <p className="text-gray-500">
             Chưa tải được danh mục ngành hàng — kiểm tra đã chạy supabase/schema.sql chưa.

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useShop } from "../providers";
 import { uploadShopBanner } from "@/lib/shops";
-import { BANNER_THEMES } from "@/lib/banners";
+import { BANNER_THEMES, REVIEW_STATUS_LABEL, REVIEW_STATUS_CLASS } from "@/lib/banners";
 import AdBanner from "../components/AdBanner";
 import BannerImageUploader from "./BannerImageUploader";
 
@@ -12,6 +12,16 @@ import BannerImageUploader from "./BannerImageUploader";
 // (saveBanner ở ShopProvider dùng upsert theo shop_id), banner này sau đó
 // được luân phiên hiển thị ở nhiều trang khác của web (xem AdSlot.js) —
 // không chỉ hiện trên trang của chính gian hàng này.
+//
+// v15: banner giờ phải qua ADMIN PHÊ DUYỆT (review_status) mới thật sự
+// chạy công khai — "Lưu banner"/"Sửa" chỉ lưu NỘI DUNG (mặc định ở trạng
+// thái "draft"/giữ nguyên trạng thái cũ), người bán cần bấm thêm nút
+// "Chạy quảng cáo" để chuyển sang "pending" gửi cho Admin duyệt tại trang
+// /admin/banners. Xem supabase/schema.sql mục 11 (trigger
+// shop_banners_guard_review) để biết vì sao KHÔNG THỂ tự đặt "approved" từ
+// phía frontend dù có sửa code.
+const SUBMITTABLE_STATUSES = ["draft", "rejected", "changes_requested"];
+
 export default function BannerManager({ shop }) {
   const { myBanner, saveBanner, deleteBanner } = useShop();
 
@@ -25,6 +35,7 @@ export default function BannerManager({ shop }) {
   const [imagePreviewUrl, setImagePreviewUrl] = useState("");
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -136,15 +147,50 @@ export default function BannerManager({ shop }) {
     }
   }
 
+  // v15: gửi banner hiện tại cho Admin duyệt — chỉ đổi review_status sang
+  // "pending", KHÔNG đụng tới nội dung banner. Trigger ở server (mục 11)
+  // vẫn kiểm tra lại nên dù có gọi hàm này với status khác "pending" cũng
+  // không thể tự ý phê duyệt cho chính mình.
+  async function handleSubmitForReview() {
+    if (!myBanner) return;
+    setSubmitting(true);
+    try {
+      await saveBanner({
+        title: myBanner.title,
+        subtitle: myBanner.subtitle,
+        imageUrl: myBanner.imageUrl,
+        linkUrl: myBanner.linkUrl,
+        theme: myBanner.theme,
+        active: myBanner.active,
+        reviewStatus: "pending",
+      });
+    } catch (err) {
+      alert(err.message || "Gửi duyệt banner thất bại, vui lòng thử lại.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   const busy = uploading || saving;
 
   if (mode === "view") {
+    const canSubmit = myBanner && SUBMITTABLE_STATUSES.includes(myBanner.reviewStatus);
+    const showNote =
+      myBanner &&
+      ["rejected", "changes_requested"].includes(myBanner.reviewStatus) &&
+      myBanner.reviewNote;
+
     return (
       <div className="border border-gray-200 rounded-xl p-6 mb-8">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
           <h2 className="text-lg font-bold text-gray-900">Banner quảng cáo</h2>
           {myBanner ? (
-            <div className="flex items-center gap-3 shrink-0">
+            <div className="flex items-center gap-3 shrink-0 flex-wrap">
+              <span
+                className={`text-xs px-2.5 py-1 rounded-full font-medium ${REVIEW_STATUS_CLASS[myBanner.reviewStatus]}`}
+              >
+                {REVIEW_STATUS_LABEL[myBanner.reviewStatus]}
+              </span>
               <button
                 type="button"
                 onClick={handleToggleActive}
@@ -156,6 +202,16 @@ export default function BannerManager({ shop }) {
               >
                 {myBanner.active ? "● Đang hiển thị" : "○ Đang tắt"}
               </button>
+              {canSubmit && (
+                <button
+                  type="button"
+                  onClick={handleSubmitForReview}
+                  disabled={submitting}
+                  className="text-sm bg-gray-900 text-white px-3 py-1.5 rounded-md hover:bg-gray-800 disabled:opacity-50"
+                >
+                  {submitting ? "Đang gửi..." : "Chạy quảng cáo"}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={startEdit}
@@ -182,12 +238,26 @@ export default function BannerManager({ shop }) {
           )}
         </div>
 
+        {showNote && (
+          <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 mb-4">
+            Phản hồi từ Admin: {myBanner.reviewNote}
+          </p>
+        )}
+
         {myBanner ? (
-          <AdBanner banner={myBanner} />
+          <>
+            <AdBanner banner={myBanner} />
+            {myBanner.reviewStatus !== "approved" && (
+              <p className="text-xs text-gray-400 mt-2">
+                Banner chỉ hiển thị công khai ở trang chủ/trang sản phẩm sau khi Admin phê duyệt —
+                bấm &quot;Chạy quảng cáo&quot; để gửi duyệt.
+              </p>
+            )}
+          </>
         ) : (
           <p className="text-gray-500 text-sm py-6 text-center border border-dashed border-gray-300 rounded-xl">
             Gian hàng chưa có banner quảng cáo nào. Banner sẽ luân phiên hiển thị ở trang chủ,
-            danh sách/danh mục sản phẩm và trang chi tiết sản phẩm.
+            danh sách/danh mục sản phẩm và trang chi tiết sản phẩm sau khi Admin phê duyệt.
           </p>
         )}
       </div>

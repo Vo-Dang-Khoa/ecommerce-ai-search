@@ -15,9 +15,12 @@ const STATUS_RANK = { ongoing: 0, upcoming: 1 };
  * Banner đầu trang chủ — LUÂN PHIÊN các chương trình khuyến mãi "Sắp diễn
  * ra"/"Đang diễn ra" của TẤT CẢ ngành hàng (v14, Admin tạo ở /admin, xem
  * src/lib/promotions.js). Nếu CHƯA có khuyến mãi nào (project mới, Admin
- * chưa tạo gì) thì tự quay lại nội dung giới thiệu tĩnh mặc định, tránh
- * trang chủ bị "trống" phần đầu. 2 nút "Khám phá sản phẩm"/"Tìm kiếm AI"
- * luôn hiện NGAY DƯỚI banner, không đổi theo trạng thái khuyến mãi.
+ * chưa tạo gì) thì hiện khung placeholder "THÔNG TIN QUẢNG CÁO - KHUYẾN
+ * MÃI" thay vì nội dung giới thiệu tĩnh cũ (đã bỏ — hay bị khung quảng cáo
+ * đè lên/che mất khi có khuyến mãi thật), cùng kiểu khung "Chưa có sự
+ * kiện" đã dùng ở IndustrySection.js cho đồng bộ toàn trang. 2 nút "Khám
+ * phá sản phẩm"/"Tìm kiếm AI" luôn hiện NGAY DƯỚI banner, không đổi theo
+ * trạng thái khuyến mãi.
  */
 export default function HeroSection() {
   const { categoryPromotions, hydrated } = useShop();
@@ -69,20 +72,14 @@ export default function HeroSection() {
             )}
           </div>
         ) : (
-          <>
-            <span className="text-sm font-medium text-amber-700 bg-amber-100 px-3 py-1 rounded-full">
-              Tiệm bánh trực tuyến #1 với tìm kiếm AI
-            </span>
-            <h1 className="text-4xl sm:text-5xl font-bold text-gray-900 max-w-2xl leading-tight">
-              Bánh ngon mỗi ngày,
-              <br />
-              ngọt ngào từng khoảnh khắc
-            </h1>
-            <p className="text-lg text-gray-600 max-w-xl">
-              Từ bánh sinh nhật, bánh kem cho đến bánh mì mỗi sáng — chọn đúng
-              loại bánh bạn thích chỉ trong vài giây nhờ trợ lý tìm kiếm AI.
+          <div
+            className="w-full max-w-4xl rounded-2xl border border-dashed border-gray-300 bg-gray-50 flex items-center justify-center"
+            style={{ aspectRatio: "3 / 1" }}
+          >
+            <p className="text-sm font-medium tracking-wide text-gray-400">
+              THÔNG TIN QUẢNG CÁO - KHUYẾN MÃI
             </p>
-          </>
+          </div>
         )}
 
         <div className="flex flex-col sm:flex-row gap-4 mt-2">

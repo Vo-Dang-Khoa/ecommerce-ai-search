@@ -53,19 +53,46 @@ export function getBannerTheme(themeId) {
 // với khung banner nằm dài trên các trang.
 export const BANNER_ASPECT = 3;
 
+// v15: nhãn + màu hiển thị trạng thái duyệt banner (dùng chung ở
+// BannerManager.js — kênh người bán — và trang /admin/banners — hàng chờ
+// duyệt của Admin) để 2 nơi luôn hiển thị nhất quán cùng 1 cách gọi tên.
+export const REVIEW_STATUS_LABEL = {
+  draft: "Nháp — chưa gửi duyệt",
+  pending: "Đang chờ Admin duyệt",
+  approved: "Đã duyệt — đang chạy quảng cáo",
+  rejected: "Bị từ chối",
+  changes_requested: "Cần chỉnh sửa lại",
+};
+
+export const REVIEW_STATUS_CLASS = {
+  draft: "bg-gray-100 text-gray-600",
+  pending: "bg-sky-50 text-sky-700",
+  approved: "bg-emerald-50 text-emerald-700",
+  rejected: "bg-red-50 text-red-700",
+  changes_requested: "bg-amber-50 text-amber-700",
+};
+
 /**
  * Chọn 1 banner để hiển thị tại 1 vị trí trên web — ưu tiên banner của
- * `preferShopId` (nếu gian hàng đó có banner đang bật), rồi mới tới banner
- * MỚI NHẤT đang bật trong toàn bộ hệ thống (tạo hiệu ứng "quảng cáo chéo"
- * giữa các gian hàng, giống các sàn TMĐT thật) — trả về null nếu chưa có
- * banner nào đang bật.
+ * `preferShopId` (nếu gian hàng đó có banner đang bật VÀ đã được Admin
+ * duyệt), rồi mới tới banner MỚI NHẤT đang bật + đã duyệt trong toàn bộ hệ
+ * thống (tạo hiệu ứng "quảng cáo chéo" giữa các gian hàng, giống các sàn
+ * TMĐT thật) — trả về null nếu chưa có banner nào đủ điều kiện.
+ *
+ * Lưu ý (v15): danh sách `banners` tải về có thể LẪN banner của chính gian
+ * hàng mình dù chưa được duyệt (RLS cho chủ gian hàng xem banner của mình ở
+ * mọi trạng thái để còn sửa) — nên PHẢI lọc reviewStatus === "approved" ở
+ * đây, không chỉ dựa vào RLS, để không lỡ hiển thị công khai banner chưa
+ * qua kiểm duyệt.
  *
  * @param {object[]} banners - danh sách banner đã tải (ShopContext.banners, đã sắp mới nhất trước)
  * @param {{preferShopId?: string|null, excludeShopId?: string|null}} opts
  * @returns {object|null}
  */
 export function pickBanner(banners, { preferShopId = null, excludeShopId = null } = {}) {
-  const active = (banners || []).filter((b) => b.active && b.shopId !== excludeShopId);
+  const active = (banners || []).filter(
+    (b) => b.active && b.reviewStatus === "approved" && b.shopId !== excludeShopId
+  );
   if (active.length === 0) return null;
   if (preferShopId) {
     const preferred = active.find((b) => b.shopId === preferShopId);

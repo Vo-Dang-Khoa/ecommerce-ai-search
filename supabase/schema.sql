@@ -1,14 +1,21 @@
--- ShopAI (ecommerce-ai-search) — Supabase schema (v14: thêm bảng
--- category_promotions + bucket Storage "category-promotions" — chương
--- trình khuyến mãi THEO NGÀNH HÀNG (12 danh mục cha), CHỈ ADMIN tạo/sửa/
--- xoá được, hiển thị luân phiên "Sắp diễn ra"/"Đang diễn ra" ở banner trang
--- chủ + banner riêng cho từng ngành hàng ở trang /products — xem mục 10 và
--- src/lib/promotions.js; products.category_id cũng được dùng thật ở trang
--- /seller/products/new (chọn Ngành hàng -> Danh mục con) kể từ bản này).
+-- ShopAI (ecommerce-ai-search) — Supabase schema (v15: banner quảng cáo của
+-- gian hàng (mục 5D) giờ phải qua ADMIN PHÊ DUYỆT mới hiển thị công khai —
+-- thêm cột shop_banners.review_status/review_note/reviewed_at + trigger
+-- shop_banners_guard_review chặn Người bán tự duyệt banner của mình, xem
+-- mục 5D và mục 11 bên dưới; Người bán bấm nút "Chạy quảng cáo" (trang
+-- /seller) để gửi banner sang trạng thái "pending", Admin duyệt tại trang
+-- /admin/banners (Chấp nhận/Yêu cầu chỉnh sửa/Từ chối) — xem
+-- src/app/admin/banners/page.js).
 --
--- Lịch sử: v13 thêm bảng shop_banners + bucket Storage "shop-banners" — mỗi
--- gian hàng tự tạo 1 banner quảng cáo, hiển thị luân phiên ở nhiều trang của
--- web (mục 5D); v12 thêm cột products.video_url + bucket Storage
+-- Lịch sử: v14 thêm bảng category_promotions + bucket Storage
+-- "category-promotions" — chương trình khuyến mãi THEO NGÀNH HÀNG (12 danh
+-- mục cha), CHỈ ADMIN tạo/sửa/xoá được, hiển thị luân phiên "Sắp diễn ra"/
+-- "Đang diễn ra" ở banner trang chủ + banner riêng cho từng ngành hàng ở
+-- trang /products — xem mục 10 và src/lib/promotions.js; products.category_id
+-- cũng được dùng thật ở trang /seller/products/new (chọn Ngành hàng -> Danh
+-- mục con) kể từ bản v14; v13 thêm bảng shop_banners + bucket Storage
+-- "shop-banners" — mỗi gian hàng tự tạo 1 banner quảng cáo, hiển thị luân
+-- phiên ở nhiều trang của web (mục 5D); v12 thêm cột products.video_url + bucket Storage
 -- "product-videos", cho phép người bán đính kèm 1 video giới thiệu sản
 -- phẩm (mục 3 và mục 5B); v11 thêm cột lưu vết kiểm duyệt nội dung sản phẩm bằng AI —
 -- products.moderation_status/moderation_reason (xem mục 3 gần cuối file +
@@ -29,10 +36,13 @@
 -- mình; v4 thêm Supabase Auth thật + phân vai trò + số điện thoại/địa chỉ
 -- giao hàng + bảng orders/order_items.
 --
--- File này AN TOÀN để chạy lại (idempotent). Nếu bạn đã chạy bản v1-v13 trước
--- đó, chỉ cần chạy lại TOÀN BỘ file v14 này thêm 1 lần — nó tự thêm/sửa
+-- File này AN TOÀN để chạy lại (idempotent). Nếu bạn đã chạy bản v1-v14 trước
+-- đó, chỉ cần chạy lại TOÀN BỘ file v15 này thêm 1 lần — nó tự thêm/sửa
 -- bảng/cột/policy/danh mục, không xoá dữ liệu tài khoản/gian hàng/sản
--- phẩm/danh mục đã có.
+-- phẩm/danh mục đã có. LƯU Ý riêng cho v15: banner gian hàng NÀO ĐÃ CÓ TỪ
+-- TRƯỚC sẽ tự chuyển về review_status = 'draft' (giá trị mặc định của cột
+-- mới) và TẠM THỜI KHÔNG còn hiển thị công khai — người bán cần vào /seller
+-- bấm lại "Chạy quảng cáo" rồi chờ Admin duyệt 1 lần nữa ở /admin/banners.
 --
 -- Cách chạy: Supabase Dashboard > project của bạn > SQL Editor > New query
 -- > dán toàn bộ nội dung file này > Run.
@@ -371,13 +381,47 @@ create table if not exists shop_banners (
 
 create index if not exists shop_banners_active_idx on shop_banners (active);
 
+-- v15: banner CHỈ hiển thị công khai sau khi Admin phê duyệt (xem mục 11).
+-- 'draft' = người bán đang soạn/chưa gửi duyệt; 'pending' = đã bấm "Chạy
+-- quảng cáo", chờ Admin xử lý; 'approved' = đang chạy quảng cáo công khai;
+-- 'rejected'/'changes_requested' = Admin từ chối/yêu cầu sửa lại (xem
+-- review_note bên dưới để biết lý do). Cột NOT NULL DEFAULT 'draft' nên
+-- banner đã tạo TỪ TRƯỚC (nếu có) cũng tự chuyển về 'draft' khi chạy bản
+-- v15 này — cần gửi duyệt lại 1 lần.
+alter table shop_banners add column if not exists review_status text not null default 'draft'
+  check (review_status in ('draft', 'pending', 'approved', 'rejected', 'changes_requested'));
+-- Ghi chú của Admin khi từ chối/yêu cầu chỉnh sửa, hiển thị lại cho người
+-- bán ở trang /seller để biết cần sửa gì.
+alter table shop_banners add column if not exists review_note text not null default '';
+alter table shop_banners add column if not exists reviewed_at timestamptz;
+
+create index if not exists shop_banners_review_status_idx on shop_banners (review_status);
+
 alter table shop_banners enable row level security;
 
--- Khách (kể cả chưa đăng nhập) chỉ thấy banner ĐANG BẬT (active = true) —
--- dùng cho các trang công khai (trang chủ, danh sách sản phẩm...).
+-- Khách (kể cả chưa đăng nhập) chỉ thấy banner ĐANG BẬT (active = true) VÀ
+-- ĐÃ ĐƯỢC ADMIN DUYỆT (review_status = 'approved') — dùng cho các trang
+-- công khai (trang chủ, danh sách sản phẩm...).
 drop policy if exists "Public can read active shop banners" on shop_banners;
 create policy "Public can read active shop banners" on shop_banners
-  for select using (active = true);
+  for select using (active = true and review_status = 'approved');
+
+-- CHỈ Admin (profiles.role = 'admin') mới xem được TOÀN BỘ banner (mọi
+-- trạng thái duyệt) — phục vụ hàng chờ duyệt ở /admin/banners.
+drop policy if exists "Admin can read all shop banners" on shop_banners;
+create policy "Admin can read all shop banners" on shop_banners
+  for select using (
+    exists (select 1 from profiles where id = auth.uid() and role = 'admin')
+  );
+
+-- Admin được sửa BẤT KỲ banner nào (để chấp nhận/từ chối/yêu cầu chỉnh sửa)
+-- — trigger shop_banners_guard_review (mục 11) giới hạn CỤ THỂ Admin chỉ
+-- được đổi review_status/review_note, không đụng tới nội dung banner.
+drop policy if exists "Admin can update any shop banner" on shop_banners;
+create policy "Admin can update any shop banner" on shop_banners
+  for update using (
+    exists (select 1 from profiles where id = auth.uid() and role = 'admin')
+  );
 
 -- Người bán cần thấy ĐƯỢC CẢ banner đang tắt của chính mình (để sửa/bật
 -- lại ở trang /seller) — 2 policy select cho cùng lệnh SELECT được Postgres
@@ -691,7 +735,7 @@ where p.category_id is null
 --     (tránh ai cũng tự phong Admin được) — tự nâng 1 tài khoản ĐÃ ĐĂNG KÝ
 --     (buyer hoặc seller) lên Admin bằng cách chạy lệnh sau trong SQL Editor
 --     (thay đúng email tài khoản của bạn):
---       update profiles set role = 'admin' where email = 'adminkhoavo@gmail.com';
+--       update profiles set role = 'admin' where email = 'ban@vidu.com';
 --     Sau đó đăng nhập Admin tại /admin/login bằng đúng email + mật khẩu đó
 --     (KHÁC trang /login của Người mua/Người bán).
 --
@@ -794,3 +838,80 @@ create policy "Admin can delete category promotion images" on storage.objects
     bucket_id = 'category-promotions'
     and exists (select 1 from profiles where id = auth.uid() and role = 'admin')
   );
+
+-- ============================================================
+-- 11. v15 — Duyệt banner quảng cáo gian hàng (mục 5D): thêm hàng rào Ở TẦNG
+--     DATABASE (không chỉ ở giao diện) để người bán KHÔNG THỂ tự đặt banner
+--     của mình thành "approved" bằng cách gọi thẳng Supabase API — chỉ
+--     Admin (profiles.role = 'admin') mới có quyền đó. Trigger chạy TRƯỚC
+--     mỗi lần insert/update vào shop_banners:
+--       - Người bán tạo/sửa banner: chỉ được để review_status ở 'draft'
+--         (đang soạn) hoặc 'pending' (đã bấm "Chạy quảng cáo" ở /seller) —
+--         mọi giá trị khác bị ép về giá trị CŨ; không được tự sửa
+--         review_note/reviewed_at (đây là phản hồi của Admin).
+--       - Nếu banner ĐÃ approved mà người bán sửa lại NỘI DUNG (tiêu đề/
+--         ảnh/mô tả/liên kết/tông màu) thì tự động chuyển lại 'pending' để
+--         Admin duyệt lại bản mới — CHỈ bật/tắt hiển thị (active) thì
+--         KHÔNG cần duyệt lại vì không phải nội dung mới.
+--       - Admin: được đổi review_status tuỳ ý (approve/reject/yêu cầu sửa ở
+--         trang /admin/banners) — reviewed_at tự cập nhật đúng lúc Admin
+--         đổi trạng thái.
+-- ============================================================
+create or replace function shop_banners_guard_review()
+returns trigger as $$
+declare
+  is_admin boolean;
+begin
+  is_admin := exists (
+    select 1 from profiles where id = auth.uid() and role = 'admin'
+  );
+
+  if TG_OP = 'INSERT' then
+    if not is_admin then
+      if new.review_status not in ('draft', 'pending') then
+        new.review_status := 'draft';
+      end if;
+      new.review_note := '';
+      new.reviewed_at := null;
+    end if;
+    return new;
+  end if;
+
+  if is_admin then
+    if new.review_status in ('approved', 'rejected', 'changes_requested')
+       and new.review_status is distinct from old.review_status then
+      new.reviewed_at := now();
+    end if;
+    return new;
+  end if;
+
+  -- Từ đây trở xuống: người thao tác KHÔNG phải Admin (chủ gian hàng sửa
+  -- banner của chính mình, đã được policy "Owners can update own shop
+  -- banner" cho phép ở tầng RLS) — giữ nguyên phần thuộc quyền Admin.
+  new.review_note := old.review_note;
+  new.reviewed_at := old.reviewed_at;
+
+  if new.review_status not in ('draft', 'pending') then
+    new.review_status := old.review_status;
+  end if;
+
+  if old.review_status = 'approved' and (
+    new.title is distinct from old.title or
+    new.subtitle is distinct from old.subtitle or
+    new.image_url is distinct from old.image_url or
+    new.link_url is distinct from old.link_url or
+    new.theme is distinct from old.theme
+  ) then
+    new.review_status := 'pending';
+    new.review_note := '';
+    new.reviewed_at := null;
+  end if;
+
+  return new;
+end;
+$$ language plpgsql security definer;
+
+drop trigger if exists shop_banners_guard_review_trigger on shop_banners;
+create trigger shop_banners_guard_review_trigger
+  before insert or update on shop_banners
+  for each row execute function shop_banners_guard_review();
