@@ -9,7 +9,7 @@ const SEARCH_MODES = [
   { href: "/search/image", icon: "📷", label: "Tìm kiếm bằng hình ảnh" },
   { href: "/search/video", icon: "🎥", label: "Tìm kiếm bằng Video" },
   { href: "/search/voice", icon: "🎤", label: "Tìm kiếm bằng giọng nói" },
-  { href: "/search/barcode", icon: "🔲", label: "Tìm kiếm bằng mã vạch, QR" },
+  { href: "/search/barcode", icon: "🔲", label: "Tìm kiếm bằng mã số, mã vạch, QR" },
 ];
 
 export default function Header() {
