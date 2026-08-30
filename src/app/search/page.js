@@ -13,9 +13,9 @@ const SUGGESTIONS = [
 
 function SearchPageInner() {
   const searchParams = useSearchParams();
-  const initialQuery = searchParams.get("q") || "";
+  const urlQuery = searchParams.get("q") || "";
 
-  const [query, setQuery] = useState(initialQuery);
+  const [query, setQuery] = useState(urlQuery);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [results, setResults] = useState(null);
@@ -48,11 +48,21 @@ function SearchPageInner() {
     }
   }
 
+  // Chạy lại tìm kiếm mỗi khi tham số ?q= trên URL thay đổi — không chỉ lúc
+  // tải trang lần đầu. Trước đây effect này có dependency rỗng ([]) nên CHỈ
+  // chạy 1 lần lúc mount: nếu người dùng đang ở sẵn trang /search rồi gõ từ
+  // khoá MỚI vào ô tìm kiếm trên Header và bấm biểu tượng kính lúp, Next.js
+  // điều hướng sang cùng route /search (chỉ đổi query string) nên trang
+  // KHÔNG bị mount lại — effect không chạy lại, coi như bấm kính lúp "không
+  // có tác dụng gì". Đổi dependency thành `urlQuery` để effect chạy lại mỗi
+  // khi giá trị này đổi, dù là lần đầu vào trang hay điều hướng lại từ
+  // Header trong lúc đang ở ngay trang này.
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time auto search for the query present in the URL on first load
-    if (initialQuery) runSearch(initialQuery);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only auto-run once for the query present in the URL on first load
-  }, []);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- đồng bộ lại ô nhập với từ khoá mới trên URL (đến từ ô tìm kiếm trên Header)
+    setQuery(urlQuery);
+    if (urlQuery) runSearch(urlQuery);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- chỉ cần chạy lại khi urlQuery đổi, không phải mỗi khi state `query` cục bộ đổi (người dùng gõ trong ô mô tả của chính trang này)
+  }, [urlQuery]);
 
   function handleSearch(e) {
     e?.preventDefault();
@@ -96,6 +106,7 @@ function SearchPageInner() {
           {SUGGESTIONS.map((s) => (
             <button
               key={s}
+              type="button"
               onClick={() => setQuery(s)}
               className="text-xs text-gray-600 border border-gray-200 rounded-full px-3 py-1 hover:border-gray-900 hover:text-gray-900"
             >
