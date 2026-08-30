@@ -245,6 +245,12 @@ export async function POST(request) {
     const reply = response.text?.trim() || "Xin lỗi, mình chưa trả lời được câu này.";
     return NextResponse.json({ reply });
   } catch (error) {
+    // TODO (tạm thời, để debug): in lỗi thật ra Vercel Logs + gửi kèm
+    // "debug" trong response — SẼ XOÁ dòng debug này sau khi xác định xong
+    // nguyên nhân của lỗi Gemini đang gặp.
+    console.error("[api/chat] Gemini error:", error?.name, error?.status, error?.message);
+    const debugDetail = error?.message || String(error);
+
     // SDK Gemini gom lỗi API vào 1 class ApiError duy nhất (khác Anthropic có
     // nhiều class riêng) — phân biệt loại lỗi qua error.status (mã HTTP).
     if (error instanceof ApiError) {
@@ -262,12 +268,12 @@ export async function POST(request) {
         );
       }
       return NextResponse.json(
-        { error: "Dịch vụ AI đang gặp sự cố, vui lòng thử lại." },
+        { error: `Dịch vụ AI đang gặp sự cố, vui lòng thử lại. (debug: ${debugDetail})` },
         { status: 502 }
       );
     }
     return NextResponse.json(
-      { error: "Có lỗi không xác định khi trò chuyện với AI." },
+      { error: `Có lỗi không xác định khi trò chuyện với AI. (debug: ${debugDetail})` },
       { status: 500 }
     );
   }

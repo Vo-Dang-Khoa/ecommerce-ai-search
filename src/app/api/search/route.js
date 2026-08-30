@@ -118,13 +118,19 @@ export async function POST(request) {
 
     return NextResponse.json({ matches });
   } catch (error) {
+    // TODO (tạm thời, để debug): in lỗi thật ra Vercel Logs + gửi kèm
+    // "debug" trong response để thấy nguyên nhân chính xác trên chính giao
+    // diện lỗi — SẼ XOÁ dòng debug này sau khi xác định xong nguyên nhân.
+    console.error("[api/search] Gemini error:", error?.name, error?.status, error?.message);
+    const debugDetail = error?.message || String(error);
+
     // SDK Gemini gom lỗi API vào 1 class ApiError duy nhất (khác Anthropic có
     // nhiều class riêng) — phân biệt loại lỗi qua error.status (mã HTTP).
     if (error instanceof ApiError) {
       const status = error.status;
       if (status === 400) {
         return NextResponse.json(
-          { error: "Yêu cầu gửi tới AI không hợp lệ." },
+          { error: `Yêu cầu gửi tới AI không hợp lệ. (debug: ${debugDetail})` },
           { status: 400 }
         );
       }
@@ -141,12 +147,12 @@ export async function POST(request) {
         );
       }
       return NextResponse.json(
-        { error: "Dịch vụ AI đang gặp sự cố, vui lòng thử lại." },
+        { error: `Dịch vụ AI đang gặp sự cố, vui lòng thử lại. (debug: ${debugDetail})` },
         { status: 502 }
       );
     }
     return NextResponse.json(
-      { error: "Có lỗi không xác định khi tìm kiếm bằng AI." },
+      { error: `Có lỗi không xác định khi tìm kiếm bằng AI. (debug: ${debugDetail})` },
       { status: 500 }
     );
   }

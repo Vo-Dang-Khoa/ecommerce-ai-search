@@ -102,6 +102,17 @@ export async function POST(request) {
       reason: parsed.reason || "",
     });
   } catch (error) {
+    // TODO (tạm thời, để debug): in lỗi thật ra Vercel Logs + gửi kèm
+    // "debug" trong response — SẼ XOÁ dòng debug này sau khi xác định xong
+    // nguyên nhân của lỗi Gemini đang gặp.
+    console.error(
+      "[api/moderate-product] Gemini error:",
+      error?.name,
+      error?.status,
+      error?.message
+    );
+    const debugDetail = error?.message || String(error);
+
     // Lỗi gọi AI (hết hạn key, quá tải, mất mạng...) -> trả lỗi rõ ràng để
     // moderateProductContent() (src/lib/security.js) tự FAIL OPEN, không
     // để sự cố của dịch vụ AI chặn luôn tính năng đăng sản phẩm cốt lõi.
@@ -120,12 +131,12 @@ export async function POST(request) {
         );
       }
       return NextResponse.json(
-        { error: "Không thể kết nối tới dịch vụ AI." },
+        { error: `Không thể kết nối tới dịch vụ AI. (debug: ${debugDetail})` },
         { status: 502 }
       );
     }
     return NextResponse.json(
-      { error: "Dịch vụ kiểm duyệt AI đang gặp sự cố." },
+      { error: `Dịch vụ kiểm duyệt AI đang gặp sự cố. (debug: ${debugDetail})` },
       { status: 502 }
     );
   }
