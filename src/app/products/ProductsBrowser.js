@@ -9,6 +9,26 @@ import { CATEGORIES } from "@/lib/products";
 import { getDescendantCategoryIds } from "@/lib/categories";
 import { useShop } from "../providers";
 
+// Bảng màu (nền nhạt + chữ/viền cùng tông) tô cho 12 nút ngành hàng — mỗi
+// ngành hàng 1 màu riêng theo THỨ TỰ hiển thị (sort_order, xem
+// supabase/schema.sql mục 9) để dễ phân biệt bằng mắt, không dùng tên màu
+// ghép chuỗi động (`bg-${color}-50`) vì Tailwind KHÔNG nhận diện được class
+// tạo ra lúc chạy — phải khai báo sẵn từng class literal như dưới đây.
+const INDUSTRY_NAV_COLORS = [
+  { bg: "bg-amber-50", text: "text-amber-800", border: "border-amber-200", hover: "hover:bg-amber-100" },
+  { bg: "bg-rose-50", text: "text-rose-800", border: "border-rose-200", hover: "hover:bg-rose-100" },
+  { bg: "bg-emerald-50", text: "text-emerald-800", border: "border-emerald-200", hover: "hover:bg-emerald-100" },
+  { bg: "bg-sky-50", text: "text-sky-800", border: "border-sky-200", hover: "hover:bg-sky-100" },
+  { bg: "bg-violet-50", text: "text-violet-800", border: "border-violet-200", hover: "hover:bg-violet-100" },
+  { bg: "bg-orange-50", text: "text-orange-800", border: "border-orange-200", hover: "hover:bg-orange-100" },
+  { bg: "bg-teal-50", text: "text-teal-800", border: "border-teal-200", hover: "hover:bg-teal-100" },
+  { bg: "bg-fuchsia-50", text: "text-fuchsia-800", border: "border-fuchsia-200", hover: "hover:bg-fuchsia-100" },
+  { bg: "bg-lime-50", text: "text-lime-800", border: "border-lime-200", hover: "hover:bg-lime-100" },
+  { bg: "bg-cyan-50", text: "text-cyan-800", border: "border-cyan-200", hover: "hover:bg-cyan-100" },
+  { bg: "bg-indigo-50", text: "text-indigo-800", border: "border-indigo-200", hover: "hover:bg-indigo-100" },
+  { bg: "bg-pink-50", text: "text-pink-800", border: "border-pink-200", hover: "hover:bg-pink-100" },
+];
+
 export default function ProductsBrowser({ category }) {
   const { allProducts, categories, hydrated } = useShop();
 
@@ -48,9 +68,9 @@ export default function ProductsBrowser({ category }) {
 
   return (
     <>
-      <p className="text-gray-600 mb-4">
+      <h1 id="products-top" className="text-2xl sm:text-3xl font-bold text-gray-900 mb-4 scroll-mt-24">
         {category ? `Danh mục: ${category}` : "Khám phá sản phẩm theo từng ngành hàng của ShopAI"}
-      </p>
+      </h1>
 
       {category ? (
         // Chế độ CŨ (đã chọn 1 trong 8 danh mục bánh) — giữ nguyên thanh
@@ -80,23 +100,30 @@ export default function ProductsBrowser({ category }) {
         // Thanh nút bấm nhanh "Tất cả" + 12 ngành hàng — bấm vào 1 ngành
         // hàng thì trang tự cuộn mượt xuống đúng khối ngành hàng đó (neo
         // #industry-<id> đặt trên section tương ứng ở IndustrySection.js),
-        // KHÔNG tải lại trang hay lọc lại danh sách.
-        <div className="flex flex-wrap gap-2 mb-8">
+        // KHÔNG tải lại trang hay lọc lại danh sách. Lưới 7 cột (từ màn
+        // hình sm trở lên) để 13 nút (Tất cả + 12 ngành hàng) luôn gọn
+        // trong ĐÚNG 2 hàng (7 + 6) thay vì tràn thành nhiều hàng như kiểu
+        // chip cũ; mỗi nút cao bằng nhau (items-stretch) và được PHÉP xuống
+        // dòng (không ép 1 dòng) vì tên ngành hàng khá dài.
+        <div className="grid grid-cols-3 sm:grid-cols-7 gap-2 mb-8 items-stretch">
           <a
             href="#products-top"
-            className="text-sm px-3 py-1.5 rounded-full border bg-gray-900 text-white border-gray-900 transition-colors"
+            className="flex items-center justify-center text-center rounded-lg border bg-gray-900 text-white border-gray-900 hover:bg-gray-800 transition-colors px-2 py-2.5 text-[11px] sm:text-xs font-semibold leading-tight"
           >
             Tất cả
           </a>
-          {roots.map((root) => (
-            <a
-              key={root.id}
-              href={`#industry-${root.id}`}
-              className="text-sm px-3 py-1.5 rounded-full border border-gray-300 text-gray-700 hover:border-gray-900 transition-colors"
-            >
-              {root.name}
-            </a>
-          ))}
+          {roots.map((root, i) => {
+            const color = INDUSTRY_NAV_COLORS[i % INDUSTRY_NAV_COLORS.length];
+            return (
+              <a
+                key={root.id}
+                href={`#industry-${root.id}`}
+                className={`flex items-center justify-center text-center rounded-lg border ${color.bg} ${color.text} ${color.border} ${color.hover} transition-colors px-2 py-2.5 text-[11px] sm:text-xs font-semibold leading-tight`}
+              >
+                {root.name}
+              </a>
+            );
+          })}
         </div>
       )}
 

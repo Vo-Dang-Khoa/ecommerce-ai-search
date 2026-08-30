@@ -21,6 +21,12 @@ const STATUS_RANK = { ongoing: 0, upcoming: 1 };
  * kiện" đã dùng ở IndustrySection.js cho đồng bộ toàn trang. 2 nút "Khám
  * phá sản phẩm"/"Tìm kiếm AI" luôn hiện NGAY DƯỚI banner, không đổi theo
  * trạng thái khuyến mãi.
+ *
+ * Banner rộng HẾT CHIỀU NGANG khung `max-w-7xl` của section (KHÔNG còn bị
+ * bó hẹp thêm `max-w-4xl` như trước) để to/rộng bằng đúng banner quảng cáo
+ * của gian hàng (AdBanner.js, hiện ở trang /products qua AdSlot.js — nơi
+ * đó cũng không bị giới hạn max-w riêng nào khác ngoài `max-w-7xl` của
+ * trang chứa nó).
  */
 export default function HeroSection() {
   const { categoryPromotions, hydrated } = useShop();
@@ -53,7 +59,7 @@ export default function HeroSection() {
     <section className="bg-gradient-to-b from-amber-50 to-white">
       <div className="max-w-7xl mx-auto px-4 py-16 sm:py-20 flex flex-col items-center text-center gap-6">
         {activePromotion ? (
-          <div className="w-full max-w-4xl">
+          <div className="w-full">
             <PromotionBanner promotion={activePromotion} />
             {livePromotions.length > 1 && (
               <div className="flex justify-center gap-1.5 mt-3">
@@ -73,7 +79,7 @@ export default function HeroSection() {
           </div>
         ) : (
           <div
-            className="w-full max-w-4xl rounded-2xl border border-dashed border-gray-300 bg-gray-50 flex items-center justify-center"
+            className="w-full rounded-2xl border border-dashed border-gray-300 bg-gray-50 flex items-center justify-center"
             style={{ aspectRatio: "3 / 1" }}
           >
             <p className="text-sm font-medium tracking-wide text-gray-400">

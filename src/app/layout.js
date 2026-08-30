@@ -1,6 +1,7 @@
 import { Geist, Geist_Mono } from "next/font/google";
 import Header from "./components/Header";
 import ChatWidget from "./components/ChatWidget";
+import BackToTopButton from "./components/BackToTopButton";
 import { Providers } from "./providers";
 import "./globals.css";
 
@@ -30,6 +31,7 @@ export default function RootLayout({ children }) {
           <Header />
           {children}
           <ChatWidget />
+          <BackToTopButton />
         </Providers>
       </body>
     </html>
