@@ -1,4 +1,5 @@
 import Link from "next/link";
+import RecommendedForYou from "./components/RecommendedForYou";
 
 const categories = [
   {
@@ -94,6 +95,13 @@ export default function Home() {
             </Link>
           </div>
         </div>
+      </section>
+
+      {/* Gợi ý dành cho bạn — cá nhân hoá theo lịch sử mua hàng/xem sản
+          phẩm (rule-based, không dùng AI — xem src/lib/recommendations.js).
+          Đặt ngay sau Hero để bắt mắt trước khi vào phần danh mục chung. */}
+      <section className="max-w-7xl mx-auto px-4 pt-16">
+        <RecommendedForYou />
       </section>
 
       {/* Danh mục bánh */}

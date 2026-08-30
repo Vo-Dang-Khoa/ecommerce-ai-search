@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import ProductCard from "../components/ProductCard";
+import RecommendedForYou from "../components/RecommendedForYou";
 import { CATEGORIES } from "@/lib/products";
 import { useShop } from "../providers";
 
@@ -13,6 +14,15 @@ export default function ProductsBrowser({ category }) {
 
   return (
     <>
+      {/* Gợi ý cá nhân hoá — chỉ hiện ở chế độ xem "Tất cả" (chưa lọc theo
+          1 danh mục cụ thể), tránh trùng lặp/rối mắt khi danh sách bên dưới
+          đã lọc sẵn theo đúng 1 danh mục. */}
+      {!category && (
+        <div className="mb-12">
+          <RecommendedForYou limit={4} />
+        </div>
+      )}
+
       <p className="text-gray-600 mb-8">
         {category ? `Danh mục: ${category}` : "Tất cả các loại bánh của ShopAI"}
       </p>

@@ -1,11 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCart, useShop } from "../../providers";
 import { getEffectivePrice, getProductImage } from "@/lib/shops";
 import { getCategoryPath } from "@/lib/categories";
+import { recordProductView } from "@/lib/recommendations";
+import RecommendedForYou from "../../components/RecommendedForYou";
 
 // Trang chi tiết sản phẩm — lấy dữ liệu từ Context (ShopProvider) như phần
 // còn lại của app, đầy đủ hơn ProductQuickView (modal "Xem nhanh"): có
@@ -34,6 +36,13 @@ export default function ProductDetail({ id }) {
     () => (product?.categoryId ? getCategoryPath(product.categoryId, categories) : []),
     [product, categories]
   );
+
+  // Ghi nhận lượt xem để tính gợi ý cá nhân hoá sau này (xem
+  // src/lib/recommendations.js) — lưu ở localStorage, hoạt động cả với
+  // khách chưa đăng nhập.
+  useEffect(() => {
+    if (product) recordProductView(product);
+  }, [product]);
 
   function handleAdd() {
     addItem(product.id, qty);
@@ -202,6 +211,16 @@ export default function ProductDetail({ id }) {
             </button>
           </div>
         </div>
+      </div>
+
+      <div className="mt-16">
+        <RecommendedForYou
+          title="Có thể bạn cũng thích"
+          subtitle=""
+          preferCategory={product.category}
+          excludeProductIds={[product.id]}
+          limit={4}
+        />
       </div>
     </div>
   );
