@@ -26,10 +26,13 @@ export default function ImageSearchClient() {
   const [error, setError] = useState("");
   const [description, setDescription] = useState("");
   const [results, setResults] = useState(null);
-  const fileInputRef = useRef(null);
+  const uploadInputRef = useRef(null);
+  const cameraInputRef = useRef(null);
 
   function handleFileChange(e) {
     const file = e.target.files?.[0];
+    // Cho phép chọn lại đúng tệp cũ ở lần sau vẫn kích hoạt onChange.
+    e.target.value = "";
     if (!file) return;
 
     setError("");
@@ -77,8 +80,12 @@ export default function ImageSearchClient() {
     }
   }
 
-  function triggerFilePicker() {
-    fileInputRef.current?.click();
+  function triggerUploadPicker() {
+    uploadInputRef.current?.click();
+  }
+
+  function triggerCameraCapture() {
+    cameraInputRef.current?.click();
   }
 
   return (
@@ -91,14 +98,23 @@ export default function ImageSearchClient() {
           Tải lên ảnh bánh bạn thích
         </h1>
         <p className="text-gray-600 mb-8">
-          Chọn 1 tấm ảnh (hoặc chụp trực tiếp trên điện thoại), AI sẽ nhìn và gợi ý sản phẩm
+          Tải lên ảnh có sẵn, hoặc chụp ảnh mới ngay tại chỗ — AI sẽ nhìn và gợi ý sản phẩm
           tương tự trong cửa hàng.
         </p>
 
-        {/* capture="environment" gợi ý mở camera sau trên điện thoại — trên
-            máy tính vẫn hoạt động bình thường như input chọn file. */}
+        {/* Input KHÔNG có "capture" -> mở trình chọn tệp/thư viện ảnh bình
+            thường, dùng khi ảnh đã có sẵn trên thiết bị. */}
         <input
-          ref={fileInputRef}
+          ref={uploadInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleFileChange}
+          className="hidden"
+        />
+        {/* Input CÓ "capture=environment" -> mở thẳng camera sau để chụp
+            ảnh mới, dùng khi chưa có sẵn ảnh, cần chụp ngay. */}
+        <input
+          ref={cameraInputRef}
           type="file"
           accept="image/*"
           capture="environment"
@@ -106,14 +122,24 @@ export default function ImageSearchClient() {
           className="hidden"
         />
 
-        <button
-          type="button"
-          onClick={triggerFilePicker}
-          disabled={loading}
-          className="bg-gray-900 text-white px-6 py-3 rounded-md font-medium hover:bg-gray-800 transition-colors disabled:opacity-50 mb-6"
-        >
-          {loading ? "Đang phân tích ảnh..." : "📷 Chọn hoặc chụp ảnh"}
-        </button>
+        <div className="flex flex-col sm:flex-row gap-3 justify-center mb-6">
+          <button
+            type="button"
+            onClick={triggerUploadPicker}
+            disabled={loading}
+            className="bg-gray-900 text-white px-6 py-3 rounded-md font-medium hover:bg-gray-800 transition-colors disabled:opacity-50"
+          >
+            {loading ? "Đang phân tích ảnh..." : "🖼️ Tải ảnh có sẵn"}
+          </button>
+          <button
+            type="button"
+            onClick={triggerCameraCapture}
+            disabled={loading}
+            className="border border-gray-900 text-gray-900 px-6 py-3 rounded-md font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
+          >
+            📷 Chụp ảnh mới
+          </button>
+        </div>
 
         {previewUrl && (
           // eslint-disable-next-line @next/next/no-img-element -- ảnh xem trước từ file khách vừa chọn, không phải asset tĩnh
