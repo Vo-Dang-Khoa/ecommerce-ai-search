@@ -2,24 +2,29 @@
 
 import { useState } from "react";
 import ProductCard from "./ProductCard";
-import PromotionBanner from "./PromotionBanner";
 
 const VISIBLE_COUNT = 4;
 
 /**
- * 1 khối "ngành hàng" ở trang /products — banner khuyến mãi RIÊNG của
- * ngành hàng đó ở trên cùng (hoặc "Chưa có sự kiện" nếu ngành hàng này Admin
- * chưa tạo khuyến mãi nào — xem PromotionBanner.js/src/lib/promotions.js),
- * NGAY DƯỚI là 4 ô sản phẩm với mũi tên trái/phải để lướt qua các sản phẩm
- * khác trong ngành hàng, và nút "Xem thêm"/"Thu gọn" để bung ra xem TOÀN BỘ
- * sản phẩm ngành hàng đó (dạng lưới đầy đủ) hoặc thu gọn lại về khung 4 ô.
- * Ô nào chưa có sản phẩm (ngành hàng mới/ít sản phẩm) hiện "Chưa có sản
- * phẩm" thay vì để trống trơn — người bán thêm sản phẩm vào sau sẽ tự động
- * lấp đầy đúng ô đó ở lần tải trang kế tiếp.
+ * 1 khối "ngành hàng" ở trang /products — 4 ô sản phẩm với mũi tên trái/
+ * phải để lướt qua các sản phẩm khác trong ngành hàng, và nút "Xem thêm"/
+ * "Thu gọn" để bung ra xem TOÀN BỘ sản phẩm ngành hàng đó (dạng lưới đầy
+ * đủ) hoặc thu gọn lại về khung 4 ô. Ô nào chưa có sản phẩm (ngành hàng
+ * mới/ít sản phẩm) hiện "Chưa có sản phẩm" thay vì để trống trơn — người
+ * bán thêm sản phẩm vào sau sẽ tự động lấp đầy đúng ô đó ở lần tải trang kế
+ * tiếp.
  *
- * @param {{title: string, products: object[], promotion: object|null}} props
+ * (v16) KHÔNG còn hiện banner khuyến mãi riêng của ngành hàng ở đây nữa —
+ * chương trình khuyến mãi theo ngành hàng do Admin tạo giờ CHỈ hiện luân
+ * phiên ở banner đầu trang chủ (HeroSection.js), tránh lặp lại cùng 1 nội
+ * dung ở cả 2 trang. `id` (id={`industry-${categoryId}`}) dùng làm điểm
+ * neo để nút bấm ngành hàng ở thanh điều hướng phía trên (ProductsBrowser.js)
+ * cuộn thẳng xuống đúng khối này — `scroll-mt-24` bù trừ chiều cao header
+ * dính (sticky) để tiêu đề ngành hàng không bị header che mất sau khi cuộn.
+ *
+ * @param {{id?: string, title: string, products: object[]}} props
  */
-export default function IndustrySection({ title, products, promotion }) {
+export default function IndustrySection({ id, title, products }) {
   const [offset, setOffset] = useState(0);
   const [expanded, setExpanded] = useState(false);
 
@@ -45,20 +50,7 @@ export default function IndustrySection({ title, products, promotion }) {
   }
 
   return (
-    <section className="mb-14">
-      <div className="mb-4">
-        {promotion ? (
-          <PromotionBanner promotion={promotion} />
-        ) : (
-          <div
-            className="w-full rounded-2xl border border-dashed border-gray-300 bg-gray-50 flex items-center justify-center"
-            style={{ aspectRatio: "3 / 1" }}
-          >
-            <p className="text-sm text-gray-400">Chưa có sự kiện</p>
-          </div>
-        )}
-      </div>
-
+    <section id={id} className="mb-14 scroll-mt-24">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-bold text-gray-900">{title}</h2>
         {hasOverflow && !expanded && (

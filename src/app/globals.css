@@ -24,3 +24,11 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Trang /products: bấm nút 1 trong 12 ngành hàng thì trang tự "chạy" (cuộn
+   mượt) xuống đúng khối ngành hàng đó thay vì nhảy ngay lập tức — xem
+   ProductsBrowser.js + IndustrySection.js (thuộc tính id + scroll-mt để
+   không bị thanh header dính (sticky) ở trên che mất tiêu đề ngành hàng). */
+html {
+  scroll-behavior: smooth;
+}
