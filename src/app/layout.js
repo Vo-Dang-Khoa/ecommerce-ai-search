@@ -1,17 +1,9 @@
-import dynamic from "next/dynamic";
 import { Geist, Geist_Mono } from "next/font/google";
 import Header from "./components/Header";
+import ChatWidgetLoader from "./components/ChatWidgetLoader";
 import BackToTopButton from "./components/BackToTopButton";
 import { Providers } from "./providers";
 import "./globals.css";
-
-// ChatWidget (khung chat AI nổi góc màn hình) KHÔNG phải nội dung chính của
-// trang và không cần render sẵn ở server (ssr: false) — tải kèm JS của nó
-// SAU KHI phần đầu trang (Header + nội dung chính) đã tải xong, thay vì
-// chặn/chia sẻ băng thông với chúng ngay từ đầu. Đây là 1 phần của việc ưu
-// tiên tải phần đầu trang trước rồi mới tải dần các phần phụ, tránh giật
-// lag lúc mở trang.
-const ChatWidget = dynamic(() => import("./components/ChatWidget"), { ssr: false });
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -38,7 +30,7 @@ export default function RootLayout({ children }) {
         <Providers>
           <Header />
           {children}
-          <ChatWidget />
+          <ChatWidgetLoader />
           <BackToTopButton />
         </Providers>
       </body>
