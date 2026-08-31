@@ -58,18 +58,18 @@ export default function Header() {
           <NavLink
             href="/"
             onNavigate={closeMenu}
-            className="text-lg sm:text-xl font-bold text-gray-900"
+            className="text-lg sm:text-xl font-bold text-gray-900 whitespace-nowrap"
           >
             ShopAI
           </NavLink>
           <nav className="hidden lg:flex items-center gap-6 text-sm text-gray-600">
-            <NavLink href="/products" className="hover:text-gray-900">
+            <NavLink href="/products" className="hover:text-gray-900 whitespace-nowrap">
               Sản phẩm
             </NavLink>
-            <NavLink href="/danh-muc" className="hover:text-gray-900">
+            <NavLink href="/danh-muc" className="hover:text-gray-900 whitespace-nowrap">
               Danh mục
             </NavLink>
-            <NavLink href="/loi-cam-on" className="hover:text-gray-900">
+            <NavLink href="/loi-cam-on" className="hover:text-gray-900 whitespace-nowrap">
               Lời cảm ơn
             </NavLink>
             {/* Đang đăng nhập bên Người bán: gộp email + nhãn "Người bán"
@@ -78,24 +78,29 @@ export default function Header() {
             {user?.role === "seller" ? (
               <NavLink
                 href="/seller"
-                className="flex items-center gap-1.5 text-gray-700 hover:text-gray-900"
+                className="flex items-center gap-1.5 text-gray-700 hover:text-gray-900 shrink-0 whitespace-nowrap"
               >
-                {user.email}
-                <span className="text-xs text-amber-700 bg-amber-50 rounded-full px-2 py-0.5">
+                <span className="truncate max-w-[160px]">{user.email}</span>
+                <span className="shrink-0 whitespace-nowrap text-xs text-amber-700 bg-amber-50 rounded-full px-2 py-0.5">
                   Người bán
                 </span>
               </NavLink>
             ) : (
-              <NavLink href={sellerHref} className="hover:text-gray-900">
+              <NavLink href={sellerHref} className="hover:text-gray-900 whitespace-nowrap">
                 Người bán
               </NavLink>
             )}
           </nav>
         </div>
 
+        {/* Ô tìm kiếm hiển thị inline chỉ ở màn hình lớn (>= lg). Ở màn
+            hình nhỏ/vừa (điện thoại, máy tính bảng) ô tìm kiếm được tách
+            xuống thành 1 hàng riêng full-width bên dưới (xem khối
+            "lg:hidden" ngay sau div này) để không phải tranh chỗ với logo,
+            nút "Đăng xuất", "Giỏ hàng"... trên cùng 1 hàng gây chồng lấp. */}
         <form
           onSubmit={handleSubmit}
-          className="flex-1 flex items-center justify-center gap-1.5 min-w-0"
+          className="hidden lg:flex flex-1 items-center justify-center gap-1.5 min-w-0"
         >
           <div className="flex items-center w-full max-w-xl border border-gray-300 rounded-full pl-3 sm:pl-4 pr-1.5 py-1.5 gap-2 focus-within:border-gray-900 transition-colors">
             <input
@@ -113,7 +118,7 @@ export default function Header() {
             </button>
           </div>
 
-          <div className="hidden lg:flex items-center gap-1 shrink-0">
+          <div className="flex items-center gap-1 shrink-0">
             {SEARCH_MODES.map((mode) => (
               <NavLink
                 key={mode.href}
@@ -128,6 +133,11 @@ export default function Header() {
           </div>
         </form>
 
+        {/* Ở màn hình < lg, ô tìm kiếm inline ở trên bị ẩn -> đẩy hẳn nhóm
+            nút bên phải (Đăng nhập/Đăng xuất, Giỏ hàng) ra sát mép phải
+            bằng 1 spacer co giãn, thay vì để nó dựa vào flex-1 của form. */}
+        <div className="flex-1 lg:hidden" />
+
         <div className="flex items-center gap-3 sm:gap-4 text-sm text-gray-600 shrink-0">
           {user ? (
             <div className="flex items-center gap-2 sm:gap-3">
@@ -137,17 +147,17 @@ export default function Header() {
               {user.role !== "seller" && (
                 <NavLink
                   href="/account"
-                  className="hidden sm:inline-flex items-center gap-1.5 text-gray-700 hover:text-gray-900"
+                  className="hidden sm:inline-flex items-center gap-1.5 text-gray-700 hover:text-gray-900 shrink-0 whitespace-nowrap"
                 >
-                  {user.email}{" "}
-                  <span className="text-xs text-amber-700 bg-amber-50 rounded-full px-2 py-0.5">
+                  <span className="truncate max-w-[140px]">{user.email}</span>
+                  <span className="shrink-0 whitespace-nowrap text-xs text-amber-700 bg-amber-50 rounded-full px-2 py-0.5">
                     Người mua
                   </span>
                 </NavLink>
               )}
               <button
                 onClick={logout}
-                className="text-sm bg-gray-900 text-white px-3 sm:px-4 py-2 rounded-md hover:bg-gray-800"
+                className="shrink-0 whitespace-nowrap text-sm bg-gray-900 text-white px-3 sm:px-4 py-2 rounded-md hover:bg-gray-800"
               >
                 Đăng xuất
               </button>
@@ -156,12 +166,15 @@ export default function Header() {
             /* Đăng nhập: dành cho người mua. Chưa đăng nhập -> điều hướng
                sang trang /login?role=buyer, hiện bảng "Người mua đăng
                nhập" ngay trong thân trang (KHÔNG dùng dropdown nổi). */
-            <NavLink href="/login?role=buyer" className="hover:text-gray-900">
+            <NavLink
+              href="/login?role=buyer"
+              className="shrink-0 whitespace-nowrap hover:text-gray-900"
+            >
               Đăng nhập
             </NavLink>
           )}
 
-          <NavLink href="/cart" className="relative hover:text-gray-900">
+          <NavLink href="/cart" className="relative shrink-0 whitespace-nowrap hover:text-gray-900">
             Giỏ hàng
             {totalCount > 0 && (
               <span className="absolute -top-2 -right-3 bg-gray-900 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
@@ -170,6 +183,30 @@ export default function Header() {
             )}
           </NavLink>
         </div>
+      </div>
+
+      {/* Hàng tìm kiếm riêng cho màn hình < lg (điện thoại, máy tính bảng):
+          full-width, nằm ngay dưới hàng chính, luôn hiển thị (không phụ
+          thuộc menuOpen) để không mất chức năng tìm kiếm khi ô tìm kiếm
+          inline ở hàng trên bị ẩn. */}
+      <div className="lg:hidden border-t border-gray-100 px-3 sm:px-4 py-2.5">
+        <form onSubmit={handleSubmit} className="flex items-center gap-1.5">
+          <div className="flex items-center w-full border border-gray-300 rounded-full pl-3 sm:pl-4 pr-1.5 py-1.5 gap-2 focus-within:border-gray-900 transition-colors">
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Tìm kiếm sản phẩm..."
+              className="flex-1 text-sm outline-none bg-transparent min-w-0"
+            />
+            <button
+              type="submit"
+              aria-label="Tìm kiếm"
+              className="text-gray-500 hover:text-gray-900 w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 shrink-0"
+            >
+              🔍
+            </button>
+          </div>
+        </form>
       </div>
 
       {/* Menu di động: thay thế cho nav + các icon tìm kiếm bị ẩn (hidden
@@ -204,8 +241,8 @@ export default function Header() {
                 onNavigate={closeMenu}
                 className="flex items-center gap-1.5 px-2 py-2.5 rounded-md hover:bg-gray-50 text-gray-700"
               >
-                {user.email}
-                <span className="text-xs text-amber-700 bg-amber-50 rounded-full px-2 py-0.5">
+                <span className="truncate">{user.email}</span>
+                <span className="shrink-0 whitespace-nowrap text-xs text-amber-700 bg-amber-50 rounded-full px-2 py-0.5">
                   Người bán
                 </span>
               </NavLink>
