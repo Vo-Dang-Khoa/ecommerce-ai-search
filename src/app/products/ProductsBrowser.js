@@ -5,6 +5,7 @@ import Link from "next/link";
 import ProductCard from "../components/ProductCard";
 import AdSlot from "../components/AdSlot";
 import IndustrySection from "../components/IndustrySection";
+import LazySection from "../components/LazySection";
 import { CATEGORIES } from "@/lib/products";
 import { getDescendantCategoryIds } from "@/lib/categories";
 import { useShop } from "../providers";
@@ -141,13 +142,20 @@ export default function ProductsBrowser({ category }) {
           </div>
         )
       ) : (
-        industries.map((industry) => (
-          <IndustrySection
-            key={industry.id}
-            id={`industry-${industry.id}`}
-            title={industry.title}
-            products={industry.products}
-          />
+        // 2 ngành hàng ĐẦU TIÊN dựng ngay (eager) vì luôn nằm trong/gần
+        // khung nhìn lúc vừa mở trang; 10 ngành hàng còn lại BỌC trong
+        // LazySection.js — chỉ thật sự tải ảnh/sản phẩm khi người dùng cuộn
+        // GẦN TỚI, giúp trang tải xong phần đầu trước rồi mới tải dần dần
+        // xuống chân trang thay vì tải hết 12 khối cùng lúc (nguyên nhân
+        // chính gây giật/lag khi mở trang này).
+        industries.map((industry, i) => (
+          <LazySection key={industry.id} id={`industry-${industry.id}`} eager={i < 2}>
+            <IndustrySection
+              id={`industry-${industry.id}`}
+              title={industry.title}
+              products={industry.products}
+            />
+          </LazySection>
         ))
       )}
     </>

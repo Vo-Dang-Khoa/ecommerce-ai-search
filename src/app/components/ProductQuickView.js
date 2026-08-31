@@ -63,6 +63,8 @@ export default function ProductQuickView({ product, onClose }) {
           <img
             src={image}
             alt={product.name}
+            loading="lazy"
+            decoding="async"
             className="w-full h-48 object-cover rounded-lg bg-amber-50 mb-4"
           />
         ) : (

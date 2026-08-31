@@ -54,6 +54,8 @@ export default function ProductCard({ product, reason }) {
           <img
             src={image}
             alt={product.name}
+            loading="lazy"
+            decoding="async"
             className="w-full h-32 object-cover rounded-lg bg-amber-50 shrink-0"
           />
         ) : (

@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useAuth, useCart } from "../providers";
+import NavLink from "./NavLink";
 
 const SEARCH_MODES = [
   { href: "/search/image", icon: "📷", label: "Tìm kiếm bằng hình ảnh" },
@@ -55,28 +55,28 @@ export default function Header() {
         </button>
 
         <div className="flex items-center gap-6 shrink-0">
-          <Link
+          <NavLink
             href="/"
-            onClick={closeMenu}
+            onNavigate={closeMenu}
             className="text-lg sm:text-xl font-bold text-gray-900"
           >
             ShopAI
-          </Link>
+          </NavLink>
           <nav className="hidden lg:flex items-center gap-6 text-sm text-gray-600">
-            <Link href="/products" className="hover:text-gray-900">
+            <NavLink href="/products" className="hover:text-gray-900">
               Sản phẩm
-            </Link>
-            <Link href="/danh-muc" className="hover:text-gray-900">
+            </NavLink>
+            <NavLink href="/danh-muc" className="hover:text-gray-900">
               Danh mục
-            </Link>
-            <Link href="/loi-cam-on" className="hover:text-gray-900">
+            </NavLink>
+            <NavLink href="/loi-cam-on" className="hover:text-gray-900">
               Lời cảm ơn
-            </Link>
+            </NavLink>
             {/* Đang đăng nhập bên Người bán: gộp email + nhãn "Người bán"
                 ngay tại đây (bên trái, trước khung tìm kiếm) thay vì hiện
                 lặp lại ở bên phải header như bên Người mua. */}
             {user?.role === "seller" ? (
-              <Link
+              <NavLink
                 href="/seller"
                 className="flex items-center gap-1.5 text-gray-700 hover:text-gray-900"
               >
@@ -84,11 +84,11 @@ export default function Header() {
                 <span className="text-xs text-amber-700 bg-amber-50 rounded-full px-2 py-0.5">
                   Người bán
                 </span>
-              </Link>
+              </NavLink>
             ) : (
-              <Link href={sellerHref} className="hover:text-gray-900">
+              <NavLink href={sellerHref} className="hover:text-gray-900">
                 Người bán
-              </Link>
+              </NavLink>
             )}
           </nav>
         </div>
@@ -115,7 +115,7 @@ export default function Header() {
 
           <div className="hidden lg:flex items-center gap-1 shrink-0">
             {SEARCH_MODES.map((mode) => (
-              <Link
+              <NavLink
                 key={mode.href}
                 href={mode.href}
                 title={mode.label}
@@ -123,7 +123,7 @@ export default function Header() {
                 className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-lg"
               >
                 {mode.icon}
-              </Link>
+              </NavLink>
             ))}
           </div>
         </form>
@@ -135,7 +135,7 @@ export default function Header() {
                   trái (trước khung tìm kiếm, xem nav ở trên) — không lặp
                   lại ở đây nữa. Bên Người mua vẫn hiện như cũ. */}
               {user.role !== "seller" && (
-                <Link
+                <NavLink
                   href="/account"
                   className="hidden sm:inline-flex items-center gap-1.5 text-gray-700 hover:text-gray-900"
                 >
@@ -143,7 +143,7 @@ export default function Header() {
                   <span className="text-xs text-amber-700 bg-amber-50 rounded-full px-2 py-0.5">
                     Người mua
                   </span>
-                </Link>
+                </NavLink>
               )}
               <button
                 onClick={logout}
@@ -156,19 +156,19 @@ export default function Header() {
             /* Đăng nhập: dành cho người mua. Chưa đăng nhập -> điều hướng
                sang trang /login?role=buyer, hiện bảng "Người mua đăng
                nhập" ngay trong thân trang (KHÔNG dùng dropdown nổi). */
-            <Link href="/login?role=buyer" className="hover:text-gray-900">
+            <NavLink href="/login?role=buyer" className="hover:text-gray-900">
               Đăng nhập
-            </Link>
+            </NavLink>
           )}
 
-          <Link href="/cart" className="relative hover:text-gray-900">
+          <NavLink href="/cart" className="relative hover:text-gray-900">
             Giỏ hàng
             {totalCount > 0 && (
               <span className="absolute -top-2 -right-3 bg-gray-900 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
                 {totalCount}
               </span>
             )}
-          </Link>
+          </NavLink>
         </div>
       </div>
 
@@ -177,46 +177,46 @@ export default function Header() {
       {menuOpen && (
         <div className="lg:hidden border-t border-gray-200 bg-white px-4 py-4">
           <nav className="flex flex-col gap-1 text-sm mb-4">
-            <Link
+            <NavLink
               href="/products"
-              onClick={closeMenu}
+              onNavigate={closeMenu}
               className="px-2 py-2.5 rounded-md hover:bg-gray-50 text-gray-700"
             >
               Sản phẩm
-            </Link>
-            <Link
+            </NavLink>
+            <NavLink
               href="/danh-muc"
-              onClick={closeMenu}
+              onNavigate={closeMenu}
               className="px-2 py-2.5 rounded-md hover:bg-gray-50 text-gray-700"
             >
               Danh mục
-            </Link>
-            <Link
+            </NavLink>
+            <NavLink
               href="/loi-cam-on"
-              onClick={closeMenu}
+              onNavigate={closeMenu}
               className="px-2 py-2.5 rounded-md hover:bg-gray-50 text-gray-700"
             >
               Lời cảm ơn
-            </Link>
+            </NavLink>
             {user?.role === "seller" ? (
-              <Link
+              <NavLink
                 href="/seller"
-                onClick={closeMenu}
+                onNavigate={closeMenu}
                 className="flex items-center gap-1.5 px-2 py-2.5 rounded-md hover:bg-gray-50 text-gray-700"
               >
                 {user.email}
                 <span className="text-xs text-amber-700 bg-amber-50 rounded-full px-2 py-0.5">
                   Người bán
                 </span>
-              </Link>
+              </NavLink>
             ) : (
-              <Link
+              <NavLink
                 href={sellerHref}
-                onClick={closeMenu}
+                onNavigate={closeMenu}
                 className="px-2 py-2.5 rounded-md hover:bg-gray-50 text-gray-700"
               >
                 Người bán
-              </Link>
+              </NavLink>
             )}
           </nav>
 
@@ -225,15 +225,15 @@ export default function Header() {
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
             {SEARCH_MODES.map((mode) => (
-              <Link
+              <NavLink
                 key={mode.href}
                 href={mode.href}
-                onClick={closeMenu}
+                onNavigate={closeMenu}
                 className="flex items-center gap-2.5 px-2 py-2.5 rounded-md hover:bg-gray-50 text-gray-700 text-sm"
               >
                 <span className="text-lg">{mode.icon}</span>
                 {mode.label}
-              </Link>
+              </NavLink>
             ))}
           </div>
         </div>

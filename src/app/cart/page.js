@@ -54,6 +54,8 @@ export default function CartPage() {
                         <img
                           src={image}
                           alt={product.name}
+                          loading="lazy"
+                          decoding="async"
                           className="w-12 h-12 object-cover rounded-md bg-amber-50 shrink-0"
                         />
                       ) : (

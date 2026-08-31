@@ -106,6 +106,9 @@ export default function ProductDetail({ id }) {
             <img
               src={mainImage}
               alt={product.name}
+              loading="eager"
+              decoding="async"
+              fetchPriority="high"
               className="w-full h-80 object-cover rounded-xl bg-amber-50"
             />
           ) : (
@@ -125,7 +128,13 @@ export default function ProductDetail({ id }) {
                   }`}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element -- user-uploaded data URLs/arbitrary URLs */}
-                  <img src={img} alt="" className="w-full h-full object-cover" />
+                  <img
+                    src={img}
+                    alt=""
+                    loading="lazy"
+                    decoding="async"
+                    className="w-full h-full object-cover"
+                  />
                 </button>
               ))}
             </div>

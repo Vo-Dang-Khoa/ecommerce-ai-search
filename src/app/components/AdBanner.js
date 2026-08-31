@@ -9,7 +9,11 @@ import { getBannerTheme } from "@/lib/banners";
  * để chữ trắng luôn đọc được dù ảnh nền sáng/tối, kèm tiêu đề/mô tả ngắn và
  * nhãn tên gian hàng — giống banner "được tài trợ" trên các sàn TMĐT thật.
  * Chỉ là component HIỂN THỊ THUẦN TUÝ — việc chọn banner nào để hiện nằm ở
- * AdSlot.js.
+ * AdSlot.js. Ảnh dùng `loading="lazy"` (khác PromotionBanner.js khi được
+ * đánh dấu `priority`) vì banner này KHÔNG BAO GIỜ là banner đầu tiên/quan
+ * trọng nhất của trang (luôn nằm dưới HeroSection hoặc dưới thanh điều
+ * hướng ngành hàng) — trì hoãn tải ảnh này giúp trang ưu tiên tải xong phần
+ * đầu trang trước, tránh giật lag do quá nhiều ảnh cùng tải 1 lúc.
  *
  * @param {{banner: object, className?: string}} props
  */
@@ -25,6 +29,8 @@ export default function AdBanner({ banner, className = "" }) {
       <img
         src={banner.imageUrl}
         alt={banner.title}
+        loading="lazy"
+        decoding="async"
         className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
       />
       <div className={`absolute inset-0 bg-gradient-to-r ${theme.overlay}`} />

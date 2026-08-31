@@ -58,9 +58,22 @@ export default function HeroSection() {
   return (
     <section className="bg-gradient-to-b from-amber-50 to-white">
       <div className="max-w-7xl mx-auto px-4 py-16 sm:py-20 flex flex-col items-center text-center gap-6">
-        {activePromotion ? (
+        {!hydrated ? (
+          // Đang chờ tải dữ liệu khuyến mãi từ Supabase — hiện khung xám
+          // "nhấp nháy" (skeleton) thay vì vội hiện luôn khung "chưa có
+          // khuyến mãi" rồi lại đổi sang banner thật ngay sau đó (gây cảm
+          // giác giật/nhấp nháy nội dung). Cùng kích thước (aspect-ratio
+          // 3:1) với banner thật/khung placeholder bên dưới nên KHÔNG làm
+          // trang bị nhảy/co giãn (layout shift) khi dữ liệu tải xong.
+          <div
+            className="w-full rounded-2xl bg-gray-100 animate-pulse"
+            style={{ aspectRatio: "3 / 1" }}
+          />
+        ) : activePromotion ? (
           <div className="w-full">
-            <PromotionBanner promotion={activePromotion} />
+            {/* priority: đây LUÔN là ảnh đầu tiên/quan trọng nhất của trang
+                chủ (LCP) — tải ngay, không trì hoãn như các ảnh khác. */}
+            <PromotionBanner promotion={activePromotion} priority />
             {livePromotions.length > 1 && (
               <div className="flex justify-center gap-1.5 mt-3">
                 {livePromotions.map((p, i) => (

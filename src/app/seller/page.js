@@ -208,6 +208,8 @@ function ProductRow({ product }) {
           <img
             src={image}
             alt={product.name}
+            loading="lazy"
+            decoding="async"
             className="w-14 h-14 object-cover rounded-md bg-amber-50 shrink-0"
           />
         ) : (
@@ -340,6 +342,8 @@ function SellerOrderCard({ order }) {
               <img
                 src={item.image}
                 alt={item.name}
+                loading="lazy"
+                decoding="async"
                 className="w-10 h-10 object-cover rounded-md bg-amber-50 shrink-0"
               />
             ) : (

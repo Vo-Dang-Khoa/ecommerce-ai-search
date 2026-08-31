@@ -23,9 +23,17 @@ const STATUS_BADGE_CLASS = {
  * THUẦN TUÝ — nơi gọi (PromotionHeroBanner.js, trang /products) tự lọc và
  * chọn khuyến mãi nào để truyền vào.
  *
- * @param {{promotion: object, className?: string}} props
+ * `priority`: đánh dấu ảnh này là ảnh QUAN TRỌNG NHẤT của trang (Largest
+ * Contentful Paint) — CHỈ bật ở banner khuyến mãi đầu trang chủ
+ * (HeroSection.js truyền `priority` cho khuyến mãi đang hiện), giúp trình
+ * duyệt tải ảnh này NGAY LẬP TỨC thay vì trì hoãn như ảnh bình thường, nhờ
+ * đó phần đầu trang hiện ra nhanh nhất có thể. Mọi nơi khác (banner riêng
+ * từng ngành hàng ở trang /products, xem trước ở /admin) đều để mặc định
+ * `loading="lazy"` vì không phải nội dung xuất hiện đầu tiên khi tải trang.
+ *
+ * @param {{promotion: object, className?: string, priority?: boolean}} props
  */
-export default function PromotionBanner({ promotion, className = "" }) {
+export default function PromotionBanner({ promotion, className = "", priority = false }) {
   const theme = getBannerTheme(promotion.theme);
   const status = getPromotionStatus(promotion);
 
@@ -38,6 +46,9 @@ export default function PromotionBanner({ promotion, className = "" }) {
       <img
         src={promotion.imageUrl}
         alt={promotion.title}
+        loading={priority ? "eager" : "lazy"}
+        decoding="async"
+        fetchPriority={priority ? "high" : "auto"}
         className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
       />
       <div className={`absolute inset-0 bg-gradient-to-r ${theme.overlay}`} />

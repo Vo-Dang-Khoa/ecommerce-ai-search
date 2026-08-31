@@ -271,6 +271,8 @@ function OrderCard({ order }) {
               <img
                 src={item.image}
                 alt={item.name}
+                loading="lazy"
+                decoding="async"
                 className="w-10 h-10 object-cover rounded-md bg-amber-50 shrink-0"
               />
             ) : (
