@@ -96,7 +96,7 @@ export default function CheckoutPage() {
     // Cũng KHÔNG chặn "Đặt hàng thành công" nếu lỗi (vd: project chưa chạy
     // bản schema.sql mới nhất để tạo 2 bảng này) — chỉ ghi log để debug.
     try {
-      await placeOrder({
+      const order = await placeOrder({
         items,
         paymentMethod,
         shippingMethod,
@@ -105,6 +105,27 @@ export default function CheckoutPage() {
         total: grandTotal,
         address: contact.address,
         phone: contact.phone,
+      });
+
+      // Báo cho (các) người bán có sản phẩm trong đơn qua Zalo — tính năng
+      // BỔ SUNG, KHÔNG được chặn/làm chậm "Đặt hàng thành công": gọi
+      // fetch() nhưng không await kết quả, chỉ log nếu lỗi (xem
+      // src/app/api/notify-order/route.js + src/lib/zalo.js + ZALO_SETUP.md).
+      const shopIds = [...new Set(items.map((it) => it.product.shopId).filter(Boolean))];
+      fetch("/api/notify-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderId: order.id,
+          total: grandTotal,
+          address: contact.address,
+          phone: contact.phone,
+          paymentMethod,
+          shippingMethod,
+          shopIds,
+        }),
+      }).catch((notifyErr) => {
+        console.warn("[Checkout] Không gửi được thông báo Zalo cho người bán:", notifyErr);
       });
     } catch (orderErr) {
       console.warn(

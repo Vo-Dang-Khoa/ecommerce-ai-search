@@ -76,6 +76,9 @@ function RegisterShopForm() {
               placeholder="09xxxxxxxx"
               className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-gray-900"
             />
+            <p className="text-xs text-gray-400 mt-1">
+              Số này cũng sẽ nhận SMS báo &quot;có đơn hàng mới&quot; — xem SMS_SETUP.md.
+            </p>
           </div>
           <div>
             <label className="block text-sm text-gray-700 mb-1">
@@ -173,6 +176,11 @@ function ShopInfoCard({ shop }) {
         {shop.description && (
           <p className="text-sm text-gray-600 mt-2">{shop.description}</p>
         )}
+        <p className="text-xs text-gray-400 mt-2">
+          {shop.phone
+            ? "✅ Số điện thoại này sẽ nhận SMS báo đơn hàng mới"
+            : "⚠️ Chưa có số điện thoại — sẽ không nhận được SMS báo đơn hàng mới (xem SMS_SETUP.md)"}
+        </p>
       </div>
       <button
         onClick={() => setEditing(true)}

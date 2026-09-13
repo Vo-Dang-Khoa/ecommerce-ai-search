@@ -1,3 +1,10 @@
+-- v16 (mới nhất): tính năng "báo đơn hàng mới qua SMS cho người bán" —
+-- KHÔNG cần thêm cột nào (tái sử dụng thẳng cột shops.phone đã có sẵn từ
+-- v1 làm số điện thoại nhận SMS), chỉ thêm code ở
+-- src/app/api/notify-order/route.js + src/lib/sms.js. Xem SMS_SETUP.md ở
+-- thư mục gốc dự án để biết cách cấu hình (dùng app SMS Gateway for
+-- Android, miễn phí — xem https://sms-gate.app).
+--
 -- ShopAI (ecommerce-ai-search) — Supabase schema (v15: banner quảng cáo của
 -- gian hàng (mục 5D) giờ phải qua ADMIN PHÊ DUYỆT mới hiển thị công khai —
 -- thêm cột shop_banners.review_status/review_note/reviewed_at + trigger
