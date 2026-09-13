@@ -537,17 +537,35 @@ drop policy if exists "Buyers can update own orders" on orders;
 create policy "Buyers can update own orders" on orders
   for update using (auth.uid() = buyer_id);
 
+-- v16: sửa lỗi Postgres "infinite recursion detected in policy" (mã lỗi
+-- 42P17) khi đặt/xem đơn hàng. Nguyên nhân: 2 policy ngay dưới đây (Người
+-- mua đọc/thêm order_items) subquery NGƯỢC vào bảng orders, trong khi
+-- orders lại có policy (mục 7 bên dưới, cho Người bán) subquery NGƯỢC vào
+-- order_items -> 2 bảng "gọi vòng qua lại nhau", Postgres chặn luôn. Cách
+-- sửa: tạo 1 hàm SECURITY DEFINER (giống cách làm với handle_new_user() ở
+-- mục 1) để tự kiểm tra buyer_id — hàm này chạy với quyền của người tạo
+-- (không phải quyền người đang đăng nhập) nên KHÔNG bị áp lại RLS của
+-- orders bên trong, cắt đứt vòng lặp.
+create or replace function public.is_buyer_of_order(target_order_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select exists (
+    select 1 from orders
+    where id = target_order_id and buyer_id = auth.uid()
+  );
+$$;
+
 drop policy if exists "Buyers can read own order items" on order_items;
 create policy "Buyers can read own order items" on order_items
-  for select using (
-    order_id in (select id from orders where buyer_id = auth.uid())
-  );
+  for select using (public.is_buyer_of_order(order_id));
 
 drop policy if exists "Buyers can insert own order items" on order_items;
 create policy "Buyers can insert own order items" on order_items
-  for insert with check (
-    order_id in (select id from orders where buyer_id = auth.uid())
-  );
+  for insert with check (public.is_buyer_of_order(order_id));
 
 -- ============================================================
 -- 7. Người bán xem đơn hàng của gian hàng mình — trang /seller, mục
