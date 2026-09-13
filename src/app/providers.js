@@ -1,7 +1,6 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState } from "react";
-import { PRODUCTS } from "@/lib/products";
 import { getEffectivePrice, getProductImage } from "@/lib/shops";
 import { supabase } from "@/lib/supabaseClient";
 
@@ -897,19 +896,11 @@ function ShopProvider({ children }) {
     ? sellerProducts.filter((p) => p.shopId === myShop.id)
     : [];
 
-  // Sản phẩm demo tĩnh (src/lib/products.js) KHÔNG có cột category_id (vì
-  // không phải dòng trong Supabase) — gán tạm categoryId bằng cách khớp
-  // CHÍNH XÁC tên với danh mục con đã seed sẵn (xem supabase/schema.sql mục
-  // 9, đã tạo danh mục con trùng tên 8 loại bánh cũ) để trang /danh-muc/
-  // [slug] mới vẫn hiển thị được các sản phẩm demo này, không cần sửa
-  // src/lib/products.js hay thêm cột DB cho dữ liệu tĩnh.
-  const staticProductsWithCategory = PRODUCTS.map((p) => ({
-    ...p,
-    categoryId: categories.find((c) => c.name === p.category)?.id ?? null,
-  }));
-
-  // Sản phẩm demo tĩnh (đã gán categoryId ở trên) + sản phẩm thật từ Supabase
-  const allProducts = [...staticProductsWithCategory, ...sellerProducts];
+  // v17: bỏ hẳn dữ liệu sản phẩm demo tĩnh (src/lib/products.js) — trang web
+  // giờ chỉ hiển thị sản phẩm THẬT do seller tự đăng bán (lưu trong Supabase,
+  // bảng products). Ai chưa có seller nào đăng bán thì trang sẽ trống, đúng
+  // như thực tế của 1 sàn TMĐT nhiều người bán.
+  const allProducts = sellerProducts;
 
   return (
     <ShopContext.Provider
