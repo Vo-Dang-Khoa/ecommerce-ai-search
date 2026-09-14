@@ -9,7 +9,7 @@
 import { GoogleGenAI, ApiError } from "@google/genai";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { PRODUCTS } from "@/lib/products";
+import { fetchCatalogProducts, buildCatalogText } from "@/lib/aiCatalog";
 import { PAYMENT_METHODS, SHIPPING_METHODS } from "@/lib/orderOptions";
 import { checkRateLimit, getClientIp } from "@/lib/security";
 
@@ -104,32 +104,29 @@ function summarizeOrdersAsText(toolResult) {
   return `Đây là các đơn hàng gần đây của bạn:\n${lines.join("\n")}`;
 }
 
-function buildCatalogText() {
-  return PRODUCTS.map(
-    (p) =>
-      `- id: ${p.id} | ${p.name} | danh mục: ${p.category} | ${p.price.toLocaleString("vi-VN")}đ | ${p.desc}`
-  ).join("\n");
-}
-
-function buildSystemPrompt() {
+function buildSystemPrompt(products) {
   const payments = PAYMENT_METHODS.map((m) => `- ${m.label}: ${m.desc}`).join("\n");
   const shippings = SHIPPING_METHODS.map(
     (m) => `- ${m.label}: ${m.desc} (phí ${m.fee.toLocaleString("vi-VN")}đ)`
   ).join("\n");
 
-  return `Bạn là trợ lý AI của ShopAI — tiệm bánh trực tuyến. Trả lời NGẮN GỌN, thân thiện, lịch
-sự, bằng tiếng Việt.
+  return `Bạn là trợ lý AI của ShopAI — một SÀN THƯƠNG MẠI ĐIỆN TỬ NHIỀU NGÀNH HÀNG (không phải
+chỉ tiệm bánh), quy tụ nhiều người bán (seller) khác nhau, mỗi seller có thể đăng bán BẤT KỲ loại
+sản phẩm nào (thời trang, giày dép, đồ điện tử, mỹ phẩm, đồ gia dụng, bánh ngọt...) — danh mục
+ngành hàng KHÔNG cố định, tuỳ theo catalog thực tế bên dưới tại thời điểm khách hỏi. Trả lời NGẮN
+GỌN, thân thiện, lịch sự, bằng tiếng Việt.
 
 Bạn có thể:
-1. Tư vấn/gợi ý sản phẩm dựa trên catalog dưới đây — có thể hỏi lại khách (vd sở thích, ngân
-   sách) trước khi gợi ý nếu câu hỏi chưa đủ rõ. Khi gợi ý 1 sản phẩm cụ thể, LUÔN viết theo
-   cú pháp: [Tên sản phẩm](product:id) — ví dụ [Bánh sinh nhật Chocolate Fudge](product:bsn-1).
-   CHỈ dùng id có thật trong catalog bên dưới, KHÔNG tự bịa sản phẩm/id không có.
+1. Tư vấn/gợi ý sản phẩm dựa trên catalog dưới đây, thuộc BẤT KỲ ngành hàng nào khách hỏi tới —
+   có thể hỏi lại khách (vd sở thích, ngân sách, kích cỡ) trước khi gợi ý nếu câu hỏi chưa đủ rõ.
+   Khi gợi ý 1 sản phẩm cụ thể, LUÔN viết theo cú pháp: [Tên sản phẩm](product:id) — ví dụ
+   [Giày thể thao nữ Basic](product:xxxx). CHỈ dùng id có thật trong catalog bên dưới, KHÔNG tự
+   bịa sản phẩm/id không có.
 2. Trả lời câu hỏi về chính sách thanh toán/giao hàng dựa theo thông tin dưới đây.
 3. Gọi công cụ lookup_recent_orders khi khách hỏi về đơn hàng/lịch sử mua hàng của họ.
 
-Catalog sản phẩm:
-${buildCatalogText()}
+Catalog sản phẩm (TOÀN BỘ ngành hàng đang có trên sàn, lấy trực tiếp từ dữ liệu thật):
+${buildCatalogText(products)}
 
 Phương thức thanh toán:
 ${payments}
@@ -137,9 +134,17 @@ ${payments}
 Phương thức giao hàng:
 ${shippings}
 
+QUAN TRỌNG: nếu catalog ở trên có sản phẩm thuộc ngành hàng khách hỏi (vd khách hỏi "giày nữ" mà
+catalog có sản phẩm ngành hàng "Giày nữ"/"Giày dép"...), PHẢI gợi ý đúng sản phẩm đó — TUYỆT ĐỐI
+KHÔNG được trả lời kiểu "ShopAI chỉ bán bánh"/"không kinh doanh mặt hàng này" nếu catalog thực tế
+đang có sản phẩm đó. Chỉ khi catalog THẬT SỰ không có sản phẩm nào phù hợp mới lịch sự báo khách là
+hiện sàn chưa có seller nào bán mặt hàng đó, đừng bịa ra sản phẩm không tồn tại.
+
 Nếu công cụ lookup_recent_orders báo khách chưa đăng nhập/chưa có đơn hàng, hãy nhắc khách đăng
 nhập (nút "Đăng nhập" góc phải trang) rồi hỏi lại, đừng bịa ra đơn hàng không có thật. Không trả
-lời về chủ đề ngoài phạm vi ShopAI (sản phẩm bánh, đơn hàng, chính sách cửa hàng).`;
+lời về chủ đề hoàn toàn ngoài phạm vi ShopAI (vd kiến thức chung không liên quan mua sắm/đơn
+hàng/chính sách cửa hàng) — nhưng đừng nhầm "ngoài phạm vi" với "ngoài ngành bánh", vì ShopAI bán
+nhiều ngành hàng.`;
 }
 
 // Gemini API chỉ dùng 2 role trong "contents": "user" và "model" (khác
@@ -193,7 +198,11 @@ export async function POST(request) {
 
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
   const scopedSupabase = createScopedSupabaseClient(accessToken);
-  const systemInstruction = buildSystemPrompt();
+  // Lấy catalog THẬT (mọi ngành hàng) từ Supabase ngay trước khi hỏi Gemini —
+  // không cache giữa các lần gọi để luôn phản ánh đúng sản phẩm mới nhất
+  // (seller vừa đăng bán là chatbot biết ngay ở lượt hỏi kế tiếp).
+  const products = await fetchCatalogProducts();
+  const systemInstruction = buildSystemPrompt(products);
   const contents = toGeminiContents(messages);
 
   try {

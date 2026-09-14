@@ -11,7 +11,7 @@
 // GEMINI_API_KEY miễn phí đã cấu hình, không cần thêm dịch vụ nào khác.
 import { GoogleGenAI, ApiError } from "@google/genai";
 import { NextResponse } from "next/server";
-import { PRODUCTS } from "@/lib/products";
+import { fetchCatalogProducts, buildCatalogText } from "@/lib/aiCatalog";
 import { checkRateLimit, getClientIp } from "@/lib/security";
 
 const GEMINI_MODEL = "gemini-3.1-flash-lite";
@@ -65,23 +65,25 @@ const MATCH_SCHEMA = {
   required: ["transcript", "matches"],
 };
 
-function buildPrompt() {
-  const catalog = PRODUCTS.map(
-    (p) => `- id: ${p.id} | ${p.name} | danh mục: ${p.category} | ${p.desc}`
-  ).join("\n");
+function buildPrompt(products) {
+  const catalog = buildCatalogText(products);
 
-  return `Bạn là trợ lý tìm kiếm sản phẩm cho một tiệm bánh trực tuyến tên ShopAI.
-Đoạn âm thanh đính kèm là một khách hàng nói (bằng tiếng Việt) mô tả loại bánh họ muốn tìm.
+  return `Bạn là trợ lý tìm kiếm sản phẩm cho ShopAI — một SÀN THƯƠNG MẠI ĐIỆN TỬ NHIỀU NGÀNH HÀNG
+(không phải chỉ tiệm bánh), do nhiều seller khác nhau đăng bán đủ loại sản phẩm.
+Đoạn âm thanh đính kèm là một khách hàng nói (bằng tiếng Việt) mô tả sản phẩm họ muốn tìm — CÓ THỂ
+thuộc BẤT KỲ ngành hàng nào (thời trang, giày dép, đồ điện tử, mỹ phẩm, bánh ngọt...), không chỉ
+riêng bánh.
 
-Dưới đây là toàn bộ danh mục sản phẩm hiện có:
+Dưới đây là toàn bộ danh mục sản phẩm THẬT hiện có trên sàn (mọi ngành hàng):
 ${catalog}
 
 Hãy:
 1. Nghe đoạn âm thanh, viết lại chính xác nội dung khách nói vào trường "transcript".
-2. Dựa trên nội dung đó, chọn tối đa 6 sản phẩm phù hợp nhất, xếp theo thứ tự phù hợp giảm dần.
+2. Dựa trên nội dung đó, chọn tối đa 6 sản phẩm phù hợp nhất TRONG CATALOG TRÊN, thuộc đúng ngành
+   hàng khách nhắc tới (đừng chỉ giới hạn tìm trong ngành bánh), xếp theo thứ tự phù hợp giảm dần.
 Chỉ chọn id có trong danh mục ở trên. Với mỗi sản phẩm, viết một lý do ngắn gọn bằng tiếng Việt.
-Nếu không nghe rõ hoặc không có sản phẩm nào phù hợp, để "matches" là mảng rỗng nhưng vẫn điền
-"transcript" với nội dung nghe được (để trống nếu hoàn toàn không nghe được gì).`;
+Nếu không nghe rõ hoặc catalog THẬT SỰ không có sản phẩm nào phù hợp, để "matches" là mảng rỗng
+nhưng vẫn điền "transcript" với nội dung nghe được (để trống nếu hoàn toàn không nghe được gì).`;
 }
 
 export async function POST(request) {
@@ -134,6 +136,8 @@ export async function POST(request) {
   }
 
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  // Lấy catalog THẬT (mọi ngành hàng) từ Supabase ngay trước khi hỏi Gemini.
+  const products = await fetchCatalogProducts();
 
   try {
     const response = await ai.models.generateContent({
@@ -141,7 +145,10 @@ export async function POST(request) {
       contents: [
         {
           role: "user",
-          parts: [{ text: buildPrompt() }, { inlineData: { mimeType, data: audioBase64 } }],
+          parts: [
+            { text: buildPrompt(products) },
+            { inlineData: { mimeType, data: audioBase64 } },
+          ],
         },
       ],
       config: {
@@ -154,7 +161,7 @@ export async function POST(request) {
 
     const matches = (parsed.matches ?? [])
       .map((m) => {
-        const product = PRODUCTS.find((p) => p.id === m.id);
+        const product = products.find((p) => p.id === m.id);
         return product ? { product, reason: m.reason } : null;
       })
       .filter(Boolean);

@@ -1,6 +1,6 @@
 import { GoogleGenAI, ApiError } from "@google/genai";
 import { NextResponse } from "next/server";
-import { PRODUCTS } from "@/lib/products";
+import { fetchCatalogProducts, buildCatalogText } from "@/lib/aiCatalog";
 import { checkRateLimit, getClientIp } from "@/lib/security";
 
 // Model miễn phí (free tier, không cần thẻ) — xem chi tiết ở .env.local.example.
@@ -27,20 +27,20 @@ const MATCH_SCHEMA = {
   required: ["matches"],
 };
 
-function buildPrompt(query) {
-  const catalog = PRODUCTS.map(
-    (p) => `- id: ${p.id} | ${p.name} | danh mục: ${p.category} | ${p.desc}`
-  ).join("\n");
+function buildPrompt(query, products) {
+  const catalog = buildCatalogText(products);
 
-  return `Bạn là trợ lý tìm kiếm sản phẩm cho một tiệm bánh trực tuyến tên ShopAI.
-Dưới đây là toàn bộ danh mục sản phẩm hiện có:
+  return `Bạn là trợ lý tìm kiếm sản phẩm cho ShopAI — một SÀN THƯƠNG MẠI ĐIỆN TỬ NHIỀU NGÀNH HÀNG
+(không phải chỉ tiệm bánh), do nhiều seller khác nhau đăng bán đủ loại sản phẩm.
+Dưới đây là toàn bộ danh mục sản phẩm THẬT hiện có trên sàn (mọi ngành hàng):
 ${catalog}
 
 Yêu cầu của khách hàng: "${query}"
 
-Hãy chọn tối đa 6 sản phẩm phù hợp nhất với yêu cầu trên, xếp theo thứ tự phù hợp giảm dần.
+Hãy chọn tối đa 6 sản phẩm phù hợp nhất với yêu cầu trên, THUỘC BẤT KỲ ngành hàng nào có trong
+catalog (đừng chỉ giới hạn ở bánh), xếp theo thứ tự phù hợp giảm dần.
 Chỉ chọn id có trong danh mục ở trên. Với mỗi sản phẩm, viết một lý do ngắn gọn bằng tiếng Việt giải thích vì sao nó phù hợp với yêu cầu.
-Nếu không có sản phẩm nào thực sự phù hợp, trả về mảng matches rỗng.`;
+Nếu catalog THẬT SỰ không có sản phẩm nào phù hợp, trả về mảng matches rỗng — đừng bịa sản phẩm không có thật.`;
 }
 
 export async function POST(request) {
@@ -96,11 +96,13 @@ export async function POST(request) {
   }
 
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  // Lấy catalog THẬT (mọi ngành hàng) từ Supabase ngay trước khi hỏi Gemini.
+  const products = await fetchCatalogProducts();
 
   try {
     const response = await ai.models.generateContent({
       model: GEMINI_MODEL,
-      contents: buildPrompt(query),
+      contents: buildPrompt(query, products),
       config: {
         responseMimeType: "application/json",
         responseSchema: MATCH_SCHEMA,
@@ -111,7 +113,7 @@ export async function POST(request) {
 
     const matches = (parsed.matches ?? [])
       .map((m) => {
-        const product = PRODUCTS.find((p) => p.id === m.id);
+        const product = products.find((p) => p.id === m.id);
         return product ? { product, reason: m.reason } : null;
       })
       .filter(Boolean);

@@ -1,11 +1,12 @@
 // API tìm kiếm sản phẩm bằng HÌNH ẢNH — khách tải lên (hoặc chụp) 1 tấm
-// ảnh bánh họ thích, Gemini "nhìn hiểu" hình ảnh (đặc điểm, màu sắc, cách
-// trang trí, loại bánh) rồi chọn sản phẩm tương tự nhất trong catalog —
-// dùng chung GEMINI_API_KEY miễn phí đã cấu hình, giống hệt cách làm với
+// ảnh sản phẩm họ thích (thuộc BẤT KỲ ngành hàng nào đang bán trên sàn,
+// không riêng bánh), Gemini "nhìn hiểu" hình ảnh (đặc điểm, màu sắc, kiểu
+// dáng, ngành hàng) rồi chọn sản phẩm tương tự nhất trong catalog — dùng
+// chung GEMINI_API_KEY miễn phí đã cấu hình, giống hệt cách làm với
 // /api/search (văn bản) và /api/search-voice (giọng nói).
 import { GoogleGenAI, ApiError } from "@google/genai";
 import { NextResponse } from "next/server";
-import { PRODUCTS } from "@/lib/products";
+import { fetchCatalogProducts, buildCatalogText } from "@/lib/aiCatalog";
 import { checkRateLimit, getClientIp } from "@/lib/security";
 
 const GEMINI_MODEL = "gemini-3.1-flash-lite";
@@ -29,7 +30,7 @@ const MATCH_SCHEMA = {
     imageDescription: {
       type: "string",
       description:
-        "Mô tả ngắn gọn bằng tiếng Việt những gì thấy trong ảnh (loại bánh, màu sắc, trang trí...)",
+        "Mô tả ngắn gọn bằng tiếng Việt những gì thấy trong ảnh (loại sản phẩm, ngành hàng, màu sắc, kiểu dáng...)",
     },
     matches: {
       type: "array",
@@ -49,26 +50,28 @@ const MATCH_SCHEMA = {
   required: ["imageDescription", "matches"],
 };
 
-function buildPrompt() {
-  const catalog = PRODUCTS.map(
-    (p) => `- id: ${p.id} | ${p.name} | danh mục: ${p.category} | ${p.desc}`
-  ).join("\n");
+function buildPrompt(products) {
+  const catalog = buildCatalogText(products);
 
-  return `Bạn là trợ lý tìm kiếm sản phẩm cho một tiệm bánh trực tuyến tên ShopAI.
-Hình ảnh đính kèm là một tấm ảnh bánh do khách hàng cung cấp — có thể là ảnh họ tự chụp, ảnh
-sưu tầm, hoặc ảnh 1 chiếc bánh họ muốn tìm loại tương tự.
+  return `Bạn là trợ lý tìm kiếm sản phẩm cho ShopAI — một SÀN THƯƠNG MẠI ĐIỆN TỬ NHIỀU NGÀNH HÀNG
+(không phải chỉ tiệm bánh), do nhiều seller khác nhau đăng bán đủ loại sản phẩm.
+Hình ảnh đính kèm là ảnh 1 sản phẩm (CÓ THỂ thuộc BẤT KỲ ngành hàng nào — thời trang, giày dép,
+đồ điện tử, mỹ phẩm, bánh ngọt...) do khách hàng cung cấp — có thể là ảnh họ tự chụp, ảnh sưu tầm,
+hoặc ảnh 1 sản phẩm họ muốn tìm loại tương tự.
 
-Dưới đây là toàn bộ danh mục sản phẩm hiện có:
+Dưới đây là toàn bộ danh mục sản phẩm THẬT hiện có trên sàn (mọi ngành hàng):
 ${catalog}
 
 Hãy:
-1. Quan sát hình ảnh, mô tả ngắn gọn bằng tiếng Việt vào trường "imageDescription" (loại bánh,
-   màu sắc, cách trang trí, đặc điểm nổi bật).
-2. Dựa trên đặc điểm đó, chọn tối đa 6 sản phẩm TRONG DANH MỤC TRÊN có hình dáng/phong cách/loại
-   bánh gần giống nhất, xếp theo thứ tự phù hợp giảm dần.
+1. Quan sát hình ảnh, mô tả ngắn gọn bằng tiếng Việt vào trường "imageDescription" (đây là loại
+   sản phẩm gì, thuộc ngành hàng nào, màu sắc, kiểu dáng, đặc điểm nổi bật).
+2. Dựa trên đặc điểm đó, chọn tối đa 6 sản phẩm TRONG DANH MỤC TRÊN có hình dáng/kiểu dáng/loại
+   sản phẩm gần giống nhất — KHÔNG giới hạn chỉ tìm trong ngành bánh, hãy đối chiếu đúng ngành
+   hàng của ảnh (vd ảnh giày thì chỉ so với sản phẩm ngành giày dép trong catalog).
 Chỉ chọn id có trong danh mục ở trên — KHÔNG bịa sản phẩm/id không có. Với mỗi sản phẩm, viết một
-lý do ngắn gọn giải thích vì sao nó giống với ảnh. Nếu ảnh không phải bánh hoặc không có sản phẩm
-nào giống, để "matches" là mảng rỗng nhưng vẫn điền "imageDescription".`;
+lý do ngắn gọn giải thích vì sao nó giống với ảnh. Nếu catalog THẬT SỰ không có sản phẩm nào giống
+(vd đúng ngành hàng đó nhưng sàn chưa có seller nào bán), để "matches" là mảng rỗng nhưng vẫn điền
+"imageDescription".`;
 }
 
 export async function POST(request) {
@@ -120,6 +123,8 @@ export async function POST(request) {
   }
 
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  // Lấy catalog THẬT (mọi ngành hàng) từ Supabase ngay trước khi hỏi Gemini.
+  const products = await fetchCatalogProducts();
 
   try {
     const response = await ai.models.generateContent({
@@ -127,7 +132,10 @@ export async function POST(request) {
       contents: [
         {
           role: "user",
-          parts: [{ text: buildPrompt() }, { inlineData: { mimeType, data: imageBase64 } }],
+          parts: [
+            { text: buildPrompt(products) },
+            { inlineData: { mimeType, data: imageBase64 } },
+          ],
         },
       ],
       config: {
@@ -140,7 +148,7 @@ export async function POST(request) {
 
     const matches = (parsed.matches ?? [])
       .map((m) => {
-        const product = PRODUCTS.find((p) => p.id === m.id);
+        const product = products.find((p) => p.id === m.id);
         return product ? { product, reason: m.reason } : null;
       })
       .filter(Boolean);

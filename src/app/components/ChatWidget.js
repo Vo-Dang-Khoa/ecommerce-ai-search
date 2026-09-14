@@ -11,7 +11,7 @@ import { supabase } from "@/lib/supabaseClient";
 const WELCOME_MESSAGE = {
   role: "assistant",
   content:
-    "Xin chào! Mình là trợ lý AI của ShopAI 🍰 — mình có thể giúp bạn tìm bánh phù hợp, trả lời câu hỏi về giao hàng/thanh toán, hoặc tra cứu đơn hàng bạn đã đặt (nếu bạn đã đăng nhập). Bạn cần gì nhỉ?",
+    "Xin chào! Mình là trợ lý AI của ShopAI 🛍️ — mình có thể giúp bạn tìm sản phẩm phù hợp (thuộc bất kỳ ngành hàng nào đang bán trên sàn), trả lời câu hỏi về giao hàng/thanh toán, hoặc tra cứu đơn hàng bạn đã đặt (nếu bạn đã đăng nhập). Bạn cần gì nhỉ?",
   synthetic: true,
 };
 
@@ -119,7 +119,7 @@ export default function ChatWidget() {
       {open && (
         <div className="fixed bottom-24 right-5 z-50 w-[90vw] max-w-sm h-[70vh] max-h-[560px] bg-white border border-gray-200 rounded-xl shadow-2xl flex flex-col overflow-hidden">
           <div className="bg-gray-900 text-white px-4 py-3 shrink-0">
-            <p className="font-semibold text-sm">Trợ lý AI ShopAI 🍰</p>
+            <p className="font-semibold text-sm">Trợ lý AI ShopAI 🛍️</p>
             <p className="text-xs text-gray-300">Hỏi về sản phẩm, đơn hàng, chính sách...</p>
           </div>
 
