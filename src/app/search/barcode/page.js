@@ -16,9 +16,8 @@ export default function BarcodeSearchPage() {
           Quét mã hoặc nhập mã để tìm nhanh
         </h1>
         <p className="text-gray-600 mb-8">
-          Mỗi sản phẩm trên ShopAI có 1 mã riêng (xem trên trang chi tiết sản phẩm, ví dụ
-          &quot;bsn-1&quot;). Quét mã vạch/QR bằng camera, hoặc nhập mã trực tiếp — không cần
-          mô tả, không cần AI.
+          Sản phẩm nào được người bán gắn sẵn mã vạch/QR (in trên bao bì thật) đều tìm được ngay
+          bằng cách này — quét bằng camera, hoặc nhập mã trực tiếp — không cần mô tả, không cần AI.
         </p>
 
         <h2 className="text-sm font-semibold text-gray-900 mb-3 text-left max-w-md mx-auto">

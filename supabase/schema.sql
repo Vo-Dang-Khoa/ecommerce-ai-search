@@ -1,4 +1,11 @@
--- v16 (mới nhất): tính năng "báo đơn hàng mới qua SMS cho người bán" —
+-- v17 (mới nhất): thêm cột products.barcode — Người bán tự gắn mã vạch/QR
+-- THẬT (in trên bao bì) cho sản phẩm lúc đăng/sửa (trang
+-- /seller/products/new và /seller/products/[id]), Người mua quét lại đúng mã
+-- đó ở trang /search/barcode sẽ ra đúng sản phẩm. Xem mục 3 bên dưới (ngay
+-- sau cột video_url) + src/app/components/BarcodeScanButton.js +
+-- src/app/search/barcode/CodeSearchClient.js.
+--
+-- v16: tính năng "báo đơn hàng mới qua SMS cho người bán" —
 -- KHÔNG cần thêm cột nào (tái sử dụng thẳng cột shops.phone đã có sẵn từ
 -- v1 làm số điện thoại nhận SMS), chỉ thêm code ở
 -- src/app/api/notify-order/route.js + src/lib/sms.js. Xem SMS_SETUP.md ở
@@ -253,6 +260,24 @@ alter table products add column if not exists moderation_reason text not null de
 -- video được kiểm tra ở phía trình duyệt (trang /seller/products/new)
 -- TRƯỚC khi tải lên, không kiểm tra lại ở đây.
 alter table products add column if not exists video_url text;
+
+-- v17: mã vạch/mã QR THẬT in trên bao bì sản phẩm (EAN-13, UPC-A, Code-128,
+-- hoặc chuỗi bất kỳ trong QR riêng của seller) — seller tự quét bằng camera
+-- hoặc gõ tay lúc đăng/sửa sản phẩm (trang /seller/products/new và
+-- /seller/products/[id], xem BarcodeScanButton.js dùng lại đúng thư viện
+-- html5-qrcode đã dùng ở /search/barcode). Khi người MUA quét lại đúng mã đó
+-- ở trang /search/barcode, hệ thống tra thẳng cột này để ra đúng sản phẩm —
+-- xem findProductByCode() trong CodeSearchClient.js. NULL/không điền = sản
+-- phẩm chưa gắn mã vạch thật, vẫn tìm được qua tên/AI/mã nội bộ như cũ.
+alter table products add column if not exists barcode text;
+
+-- 1 mã vạch thật chỉ nên trỏ về ĐÚNG 1 sản phẩm trên toàn sàn (khác sản
+-- phẩm khác dùng chung mã vạch sẽ gây tra cứu sai/nhầm lẫn giữa các gian
+-- hàng) — index UNIQUE nhưng bỏ qua giá trị NULL (nhiều sản phẩm cùng chưa
+-- có mã vạch vẫn insert/update bình thường, không bị chặn bởi ràng buộc
+-- unique).
+create unique index if not exists products_barcode_unique_idx on products (barcode)
+  where barcode is not null;
 
 -- ============================================================
 -- 4. Row Level Security — thay policy "công khai cho mọi thao tác ghi" ở

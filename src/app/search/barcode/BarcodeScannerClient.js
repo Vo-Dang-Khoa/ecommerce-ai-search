@@ -123,9 +123,9 @@ export default function BarcodeScannerClient() {
 
       {notFoundCode && (
         <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-md px-4 py-3 mt-4">
-          Đã quét được mã &quot;{notFoundCode}&quot; nhưng không khớp sản phẩm nào trong hệ
-          thống. Đây là bản demo đồ án nên sản phẩm chưa có mã vạch thật — bạn có thể tự tạo mã
-          QR chứa đúng mã sản phẩm (vd &quot;bsn-1&quot;) bằng công cụ tạo QR miễn phí để test.
+          Đã quét được mã &quot;{notFoundCode}&quot; nhưng chưa có sản phẩm nào trên sàn gắn đúng
+          mã vạch/QR này. Nếu bạn là seller, vào trang đăng/sửa sản phẩm để gắn mã vạch/QR thật
+          (in trên bao bì) cho sản phẩm của mình.
         </div>
       )}
 

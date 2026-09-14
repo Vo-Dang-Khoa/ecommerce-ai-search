@@ -369,6 +369,8 @@ function mapProduct(row) {
     // v12: video giới thiệu sản phẩm (tuỳ chọn) — URL công khai từ bucket
     // Storage "product-videos", null nếu người bán không đính kèm video.
     videoUrl: row.video_url || null,
+    // v17: mã vạch/QR THẬT in trên bao bì (seller tự gắn) — null = chưa gắn.
+    barcode: row.barcode || null,
     promotion: row.promotion,
     // Thuộc tính sản phẩm (VD: Trọng lượng, Xuất xứ...), mảng { key, value }.
     attributes: row.attributes || [],
@@ -642,6 +644,7 @@ function ShopProvider({ children }) {
     desc,
     images = [],
     videoUrl = null,
+    barcode = null,
   }) {
     if (!myShop) throw new Error("Bạn cần đăng ký gian hàng trước.");
     const { data, error } = await supabase
@@ -655,11 +658,22 @@ function ShopProvider({ children }) {
         description: desc || "",
         images,
         video_url: videoUrl || null,
+        // v17: mã vạch/QR thật (tuỳ chọn) — trim + rỗng thành null để tránh
+        // đụng ràng buộc unique khi nhiều sản phẩm cùng để trống.
+        barcode: barcode?.trim() || null,
         promotion: null,
       })
       .select()
       .single();
-    if (error) throw error;
+    if (error) {
+      // Ràng buộc unique (products_barcode_unique_idx) chặn 2 sản phẩm
+      // trùng mã vạch — báo lỗi rõ ràng bằng tiếng Việt thay vì để lộ mã lỗi
+      // Postgres khó hiểu (23505) ra thẳng cho người bán.
+      if (error.code === "23505") {
+        throw new Error("Mã vạch/QR này đã được gắn cho 1 sản phẩm khác trên sàn.");
+      }
+      throw error;
+    }
 
     const product = mapProduct(data);
     setSellerProducts((prev) => [...prev, product]);
@@ -690,11 +704,17 @@ function ShopProvider({ children }) {
     if (patch.desc !== undefined) dbPatch.description = patch.desc;
     if (patch.images !== undefined) dbPatch.images = patch.images;
     if (patch.videoUrl !== undefined) dbPatch.video_url = patch.videoUrl;
+    if (patch.barcode !== undefined) dbPatch.barcode = patch.barcode?.trim() || null;
     if (patch.promotion !== undefined) dbPatch.promotion = patch.promotion;
     if (patch.attributes !== undefined) dbPatch.attributes = patch.attributes;
 
     const { error } = await supabase.from("products").update(dbPatch).eq("id", productId);
-    if (error) throw error;
+    if (error) {
+      if (error.code === "23505") {
+        throw new Error("Mã vạch/QR này đã được gắn cho 1 sản phẩm khác trên sàn.");
+      }
+      throw error;
+    }
 
     setSellerProducts((prev) =>
       prev.map((p) => (p.id === productId ? { ...p, ...patch } : p))
@@ -749,6 +769,14 @@ function ShopProvider({ children }) {
   // ở trang chỉnh sửa sản phẩm. attributes: mảng { key, value }.
   async function setAttributes(productId, attributes) {
     await updateProduct(productId, { attributes });
+  }
+
+  // v17: gắn/đổi/gỡ mã vạch-QR THẬT cho 1 sản phẩm đã đăng (trang
+  // /seller/products/[id]) — truyền null/chuỗi rỗng để GỠ mã (vd seller gõ
+  // nhầm hoặc muốn đổi mã khác). Lỗi trùng mã (unique) đã được updateProduct
+  // dịch sẵn ra tiếng Việt dễ hiểu ở trên.
+  async function setBarcode(productId, barcode) {
+    await updateProduct(productId, { barcode: barcode || null });
   }
 
   // v13: tạo/sửa banner quảng cáo của gian hàng mình bằng upsert theo
@@ -933,6 +961,7 @@ function ShopProvider({ children }) {
         setPromotion,
         removePromotion,
         setAttributes,
+        setBarcode,
       }}
     >
       {children}

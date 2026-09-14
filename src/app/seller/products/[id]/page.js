@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useState } from "react";
 import { useAuth, useShop } from "../../../providers";
 import { uploadProductImage, getEffectivePrice } from "@/lib/shops";
+import BarcodeScanButton from "../../../components/BarcodeScanButton";
 
 const MAX_IMAGE_BYTES = 1.5 * 1024 * 1024;
 
@@ -393,6 +394,86 @@ function AttributesSection({ product }) {
   );
 }
 
+// v17: mã vạch/QR THẬT (in trên bao bì) — seller tự gắn/đổi/gỡ cho sản phẩm
+// ĐÃ ĐĂNG, dùng lại đúng BarcodeScanButton (quét bằng camera) đang dùng ở
+// trang đăng sản phẩm mới. Khách quét lại đúng mã này ở trang
+// /search/barcode sẽ ra thẳng sản phẩm này (xem findProductByCode() trong
+// CodeSearchClient.js).
+function BarcodeSection({ product }) {
+  const { setBarcode } = useShop();
+  const [value, setValue] = useState(product.barcode || "");
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function handleSave(e) {
+    e.preventDefault();
+    setError("");
+    setSaving(true);
+    try {
+      await setBarcode(product.id, value.trim() || null);
+    } catch (err) {
+      setError(err.message || "Cập nhật mã vạch thất bại.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleRemove() {
+    setError("");
+    setSaving(true);
+    try {
+      await setBarcode(product.id, null);
+      setValue("");
+    } catch (err) {
+      setError(err.message || "Gỡ mã vạch thất bại.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="border border-gray-200 rounded-xl p-6 mb-6">
+      <h2 className="text-lg font-bold text-gray-900 mb-4">Mã vạch / mã QR sản phẩm</h2>
+      <p className="text-sm text-gray-500 mb-4">
+        Nếu bao bì sản phẩm có sẵn mã vạch/QR, quét hoặc gõ mã đó vào đây — khách hàng quét lại
+        đúng mã này ở trang &quot;Tìm bằng mã vạch/QR&quot; sẽ ra thẳng sản phẩm này.
+      </p>
+
+      <form onSubmit={handleSave} className="flex flex-col sm:flex-row gap-2 mb-3">
+        <input
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder="Ví dụ: 8938505970017"
+          className="flex-1 border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-gray-900"
+        />
+        <div className="flex gap-2 shrink-0">
+          <button
+            type="submit"
+            disabled={saving}
+            className="text-sm bg-gray-900 text-white px-4 py-2 rounded-md hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {saving ? "Đang lưu..." : "Lưu mã vạch"}
+          </button>
+          {product.barcode && (
+            <button
+              type="button"
+              onClick={handleRemove}
+              disabled={saving}
+              className="text-sm text-red-600 hover:text-red-700 border border-red-200 rounded-md px-3 py-2 disabled:opacity-50"
+            >
+              Gỡ mã
+            </button>
+          )}
+        </div>
+      </form>
+
+      <BarcodeScanButton onScan={(code) => setValue(code)} />
+
+      {error && <p className="text-sm text-red-600 mt-3">{error}</p>}
+    </section>
+  );
+}
+
 export default function EditProductPage() {
   const { id } = useParams();
   const { user, hydrated: authHydrated } = useAuth();
@@ -451,6 +532,7 @@ export default function EditProductPage() {
         <PriceSection product={product} />
         <PromotionSection product={product} />
         <AttributesSection product={product} />
+        <BarcodeSection product={product} />
       </div>
     </main>
   );

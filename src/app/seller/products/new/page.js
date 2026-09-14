@@ -19,6 +19,7 @@ import CapturePhotoButton from "./CapturePhotoButton";
 import RecordVideoButton from "./RecordVideoButton";
 import VideoTrimModal from "./VideoTrimModal";
 import CategoryPicker from "../../../components/CategoryPicker";
+import BarcodeScanButton from "../../../components/BarcodeScanButton";
 
 export default function NewProductPage() {
   const router = useRouter();
@@ -44,6 +45,10 @@ export default function NewProductPage() {
   const [videoUrl, setVideoUrl] = useState("");
   const [videoUploading, setVideoUploading] = useState(false);
   const [videoError, setVideoError] = useState("");
+  // v17: mã vạch/QR THẬT in trên bao bì sản phẩm (tuỳ chọn) — điền tay hoặc
+  // quét bằng camera (BarcodeScanButton), để người mua quét lại ra đúng sản
+  // phẩm này ở trang /search/barcode.
+  const [barcode, setBarcode] = useState("");
   // Video quá {VIDEO_MAX_SECONDS} giây -> mở khung cắt (VideoTrimModal) chờ
   // người bán chọn đoạn cần giữ, thay vì từ chối thẳng như trước (v12).
   const [pendingTrim, setPendingTrim] = useState(null); // { url, duration } | null
@@ -292,6 +297,7 @@ export default function NewProductPage() {
         desc: desc.trim(),
         images,
         videoUrl: videoUrl || null,
+        barcode: barcode.trim() || null,
       });
       router.push(`/seller/products/${product.id}`);
     } catch (err) {
@@ -508,6 +514,25 @@ export default function NewProductPage() {
               </>
             )}
             {videoError && <p className="text-xs text-red-600 mt-1.5">{videoError}</p>}
+          </div>
+
+          <div>
+            <label className="block text-sm text-gray-700 mb-2">
+              Mã vạch / mã QR sản phẩm <span className="text-gray-400">(không bắt buộc)</span>
+            </label>
+            <p className="text-xs text-gray-400 mb-2">
+              Nếu bao bì sản phẩm có sẵn mã vạch/QR, quét hoặc gõ mã đó vào đây — khách hàng quét
+              lại đúng mã này ở trang &quot;Tìm bằng mã vạch/QR&quot; sẽ ra thẳng sản phẩm này.
+            </p>
+            <div className="flex gap-2 mb-2">
+              <input
+                value={barcode}
+                onChange={(e) => setBarcode(e.target.value)}
+                placeholder="Ví dụ: 8938505970017"
+                className="flex-1 border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-gray-900"
+              />
+            </div>
+            <BarcodeScanButton onScan={(code) => setBarcode(code)} />
           </div>
 
           {pendingTrim && (
